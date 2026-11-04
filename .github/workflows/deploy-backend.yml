@@ -1,0 +1,65 @@
+name: Deploy backend
+
+# Deploys backend/ to Cloudflare Workers whenever it changes on main (or on demand).
+# One-time setup in GitHub -> Settings -> Secrets and variables -> Actions:
+#   CLOUDFLARE_API_TOKEN   (template "Edit Cloudflare Workers")
+#   CLOUDFLARE_ACCOUNT_ID
+#   FAL_KEY or REPLICATE_TOKEN or LUMA_KEY   (at least one)
+#   OWNER_KEY              (your personal key: unlimited use; enter it in the app Settings)
+#   APP_TOKEN              (optional, recommended; use the same value for the app build)
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", ".github/workflows/deploy-backend.yml"]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Cloudflare secrets
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID not set; skipping deploy."
+            echo "SKIP=1" >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: env.SKIP != '1'
+        with:
+          node-version: 20
+
+      - name: Deploy worker and provider secrets
+        if: env.SKIP != '1'
+        working-directory: backend
+        env:
+          FAL_KEY: ${{ secrets.FAL_KEY }}
+          REPLICATE_TOKEN: ${{ secrets.REPLICATE_TOKEN }}
+          LUMA_KEY: ${{ secrets.LUMA_KEY }}
+          APP_TOKEN: ${{ secrets.APP_TOKEN }}
+          OWNER_KEY: ${{ secrets.OWNER_KEY }}
+        run: |
+          npm install --no-audit --no-fund
+          # Daily quotas for public users need a KV namespace; create it once, best effort.
+          ID=$(npx wrangler kv namespace list 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const a=JSON.parse(s.slice(s.indexOf("[")));const n=a.find(x=>x.title==="neovids-quota");console.log(n?n.id:"")}catch(e){console.log("")}})')
+          if [ -z "$ID" ]; then
+            ID=$(npx wrangler kv namespace create neovids-quota 2>&1 | grep -o '"id": *"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+          fi
+          if [ -n "$ID" ]; then
+            printf '\n[[kv_namespaces]]\nbinding = "QUOTA"\nid = "%s"\n' "$ID" >> wrangler.toml
+          else
+            echo "::warning::Could not set up the QUOTA KV namespace; daily limits will not be enforced."
+          fi
+          npx wrangler deploy
+          for name in FAL_KEY REPLICATE_TOKEN LUMA_KEY APP_TOKEN OWNER_KEY; do
+            value="${!name}"
+            if [ -n "$value" ]; then
+              printf '%s' "$value" | npx wrangler secret put "$name"
+            fi
+          done
