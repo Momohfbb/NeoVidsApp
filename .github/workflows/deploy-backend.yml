@@ -4,7 +4,7 @@ name: Deploy backend
 # One-time setup: add these as secrets of the GitHub environment "neo"
 # (Settings -> Environments -> neo -> Add environment secret) or as repository secrets:
 #   CLOUDFLARE_API_TOKEN   (template "Edit Cloudflare Workers")
-#   CLOUDFLARE_ACCOUNT_ID
+#   CLOUDFLARE_ACCOUNT_ID  (optional if the token belongs to a single account)
 #   FAL_KEY or REPLICATE_TOKEN or LUMA_KEY   (at least one)
 #   OWNER_KEY              (your personal key: unlimited use; enter it in the app Settings)
 #   APP_TOKEN              (optional, recommended; use the same value for the app build)
@@ -28,8 +28,8 @@ jobs:
 
       - name: Check Cloudflare secrets
         run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "::warning::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID not set; skipping deploy."
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN not set; skipping deploy."
             echo "SKIP=1" >> "$GITHUB_ENV"
           fi
 
@@ -48,6 +48,8 @@ jobs:
           APP_TOKEN: ${{ secrets.APP_TOKEN }}
           OWNER_KEY: ${{ secrets.OWNER_KEY }}
         run: |
+          # CLOUDFLARE_ACCOUNT_ID is optional: with a single-account token, wrangler finds the account itself.
+          [ -z "$CLOUDFLARE_ACCOUNT_ID" ] && unset CLOUDFLARE_ACCOUNT_ID
           npm install --no-audit --no-fund
           # Daily quotas for public users need a KV namespace; create it once, best effort.
           ID=$(npx wrangler kv namespace list 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const a=JSON.parse(s.slice(s.indexOf("[")));const n=a.find(x=>x.title==="neovids-quota");console.log(n?n.id:"")}catch(e){console.log("")}})')
