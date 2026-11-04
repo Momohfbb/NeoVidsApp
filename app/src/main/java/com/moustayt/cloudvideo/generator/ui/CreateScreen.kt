@@ -1,7 +1,6 @@
 package com.moustayt.cloudvideo.generator.ui
 
 import android.net.Uri
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -133,8 +132,8 @@ fun CreateScreen(vm: AppViewModel, onSubmitted: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             onClick = {
                 when {
-                    prompt.isBlank() -> Toast.makeText(ctx, R.string.need_prompt, Toast.LENGTH_SHORT).show()
-                    kind.needsImage && imageData == null -> Toast.makeText(ctx, R.string.need_image, Toast.LENGTH_SHORT).show()
+                    prompt.isBlank() -> error = ctx.getString(R.string.need_prompt)
+                    kind.needsImage && imageData == null -> error = ctx.getString(R.string.need_image)
                     else -> {
                         busy = true
                         error = null
@@ -158,7 +157,7 @@ fun CreateScreen(vm: AppViewModel, onSubmitted: () -> Unit) {
         error?.let {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
                 Text(
-                    stringResource(R.string.error_generic, it),
+                    it,
                     Modifier.padding(12.dp),
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )

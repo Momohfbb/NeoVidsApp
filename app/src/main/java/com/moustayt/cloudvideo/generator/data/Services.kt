@@ -44,7 +44,7 @@ class RemoteService(baseUrl: String, private val ownerKey: String, private val d
     private val client = HttpClient(Android) {
         install(ContentNegotiation) { json(AppJson) }
         install(HttpTimeout) {
-            requestTimeoutMillis = 120_000
+            requestTimeoutMillis = 45_000
             connectTimeoutMillis = 20_000
         }
         expectSuccess = true

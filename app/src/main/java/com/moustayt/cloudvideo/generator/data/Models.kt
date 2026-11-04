@@ -1,5 +1,8 @@
 package com.moustayt.cloudvideo.generator.data
 
+import androidx.room.ColumnInfo
+import androidx.room.Entity
+import androidx.room.PrimaryKey
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -33,8 +36,9 @@ data class JobDto(
 )
 
 @Serializable
+@Entity(tableName = "items")
 data class LibraryItem(
-    val id: String,
+    @PrimaryKey val id: String,
     val kind: Kind,
     val prompt: String,
     val style: String = "",
@@ -46,7 +50,7 @@ data class LibraryItem(
     val error: String? = null,
     val demo: Boolean = false,
     /** true for videos exported by the local editor */
-    val local: Boolean = false,
+    @ColumnInfo(name = "is_local") val local: Boolean = false,
 )
 
 @Serializable
