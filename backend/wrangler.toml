@@ -1,0 +1,13 @@
+name = "neovids-backend"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# Secrets (set with `npx wrangler secret put NAME`, never commit them):
+#   APP_TOKEN        optional shared token the app sends in `x-app-token`
+#   FAL_KEY          fal.ai key
+#   REPLICATE_TOKEN  Replicate API token
+#   LUMA_KEY         Luma Dream Machine key
+#
+# Optional plain variables:
+[vars]
+PROVIDER_ORDER = "fal,replicate,luma"
