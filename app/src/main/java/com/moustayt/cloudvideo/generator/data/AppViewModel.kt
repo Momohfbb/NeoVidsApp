@@ -55,7 +55,7 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val svc = Backends.current(app)
-                val id = svc.submit(req)
+                val id = kotlinx.coroutines.withTimeout(60_000) { svc.submit(req) }
                 dao.upsert(
                     LibraryItem(
                         id = id, kind = req.kind, prompt = req.prompt, style = req.style, aspect = req.aspect,
@@ -64,6 +64,8 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
                 )
                 TrackJobWorker.enqueue(app, id)
                 onDone(null)
+            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                onDone(Exception("انتهت المهلة: الخادم لا يردّ. تحقق من العنوان والإنترنت / Server timed out"))
             } catch (e: Exception) {
                 onDone(e)
             }
