@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -29,3 +32,11 @@ jobs:
         with:
           name: NeoVids-AI-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publish APK as "latest" release (direct phone download)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: NeoVids AI (latest build)
+          make_latest: true
+          files: app/build/outputs/apk/debug/app-debug.apk
