@@ -10,13 +10,18 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.plugins.ResponseException
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.net.URLEncoder
 import java.util.UUID
@@ -32,7 +37,7 @@ interface GenerationService {
 }
 
 /** Talks to the NeoVids backend (see /backend). API keys live only on the server. */
-class RemoteService(baseUrl: String) : GenerationService {
+class RemoteService(baseUrl: String, private val ownerKey: String, private val deviceId: String) : GenerationService {
     private val base = baseUrl.trim().trimEnd('/')
     override val isDemo = false
 
@@ -45,17 +50,31 @@ class RemoteService(baseUrl: String) : GenerationService {
         expectSuccess = true
     }
 
-    override suspend fun submit(req: GenRequest): String =
+    private fun HttpRequestBuilder.auth() {
+        if (BuildConfig.APP_TOKEN.isNotBlank()) header("x-app-token", BuildConfig.APP_TOKEN)
+        if (ownerKey.isNotBlank()) header("x-owner-key", ownerKey)
+        header("x-device-id", deviceId)
+    }
+
+    /** Turns {"error": "..."} bodies from the backend into readable messages (e.g. daily limit reached). */
+    private suspend fun <T> readable(block: suspend () -> T): T = try {
+        block()
+    } catch (e: ResponseException) {
+        val msg = runCatching { AppJson.parseToJsonElement(e.response.bodyAsText()).jsonObject["error"]?.jsonPrimitive?.content }.getOrNull()
+        throw Exception(msg ?: e.message)
+    }
+
+    override suspend fun submit(req: GenRequest): String = readable {
         client.post("$base/v1/jobs") {
             contentType(ContentType.Application.Json)
-            if (BuildConfig.APP_TOKEN.isNotBlank()) header("x-app-token", BuildConfig.APP_TOKEN)
+            auth()
             setBody(req)
         }.body<JobDto>().id
+    }
 
-    override suspend fun poll(id: String): JobDto =
-        client.get("$base/v1/jobs/${URLEncoder.encode(id, "UTF-8")}") {
-            if (BuildConfig.APP_TOKEN.isNotBlank()) header("x-app-token", BuildConfig.APP_TOKEN)
-        }.body()
+    override suspend fun poll(id: String): JobDto = readable {
+        client.get("$base/v1/jobs/${URLEncoder.encode(id, "UTF-8")}") { auth() }.body()
+    }
 }
 
 /** Works with no server at all, so the app is usable right after install. */
@@ -102,6 +121,12 @@ class Settings(context: Context) {
     var backendUrl: String
         get() = p.getString("backend", "") ?: ""
         set(v) = p.edit().putString("backend", v.trim()).apply()
+    /** Personal key that unlocks unlimited use on your own backend. */
+    var ownerKey: String
+        get() = p.getString("owner_key", "") ?: ""
+        set(v) = p.edit().putString("owner_key", v.trim()).apply()
+    val deviceId: String
+        get() = p.getString("device_id", null) ?: UUID.randomUUID().toString().also { p.edit().putString("device_id", it).apply() }
     var onboarded: Boolean
         get() = p.getBoolean("onboarded", false)
         set(v) = p.edit().putBoolean("onboarded", v).apply()

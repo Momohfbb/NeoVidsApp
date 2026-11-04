@@ -3,6 +3,7 @@ main = "src/index.js"
 compatibility_date = "2024-11-01"
 
 # Secrets (set with `npx wrangler secret put NAME`, never commit them):
+#   OWNER_KEY        your personal key: unlimited use, no daily quota (enter it in the app Settings)
 #   APP_TOKEN        optional shared token the app sends in `x-app-token`
 #   FAL_KEY          fal.ai key
 #   REPLICATE_TOKEN  Replicate API token
@@ -10,4 +11,6 @@ compatibility_date = "2024-11-01"
 #
 # Optional plain variables:
 [vars]
+FREE_DAILY_VIDEOS = "3"   # public users, per device per day
+FREE_DAILY_IMAGES = "10"
 PROVIDER_ORDER = "fal,replicate,luma"

@@ -82,4 +82,6 @@
     <string name="settings_about">NeoVids AI 2.0 — video and image studio</string>
     <string name="mode_demo">Demo mode</string>
     <string name="mode_live">Connected to your server</string>
+    <string name="settings_owner_key">Owner key</string>
+    <string name="settings_owner_key_hint">Your personal key. With it your own server applies no limits to you. Leave empty if you are a regular user.</string>
 </resources>
