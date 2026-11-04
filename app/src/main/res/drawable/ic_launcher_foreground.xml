@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- play button -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:pathData="M44,36L44,72L76,54Z" />
+    <!-- AI sparkle -->
+    <path
+        android:fillColor="#FFFFE27A"
+        android:pathData="M70,31C70.6,35 72,36.4 76,37C72,37.6 70.6,39 70,43C69.4,39 68,37.6 64,37C68,36.4 69.4,35 70,31Z" />
+</vector>
