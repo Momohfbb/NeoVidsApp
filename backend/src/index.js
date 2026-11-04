@@ -164,14 +164,25 @@ const CORS = {
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json", ...CORS } });
 
-function pickProvider(env, req) {
+function candidatesFor(env, req) {
   const order = (env.PROVIDER_ORDER || "fal,replicate,luma").split(",").map((s) => s.trim());
-  const candidates = req.provider ? [req.provider] : order;
-  for (const n of candidates) {
-    const p = PROVIDERS[n];
-    if (p && p.configured(env) && p.kinds.includes(req.kind)) return p;
+  const names = req.provider ? [req.provider] : order;
+  const list = names.map((n) => PROVIDERS[n]).filter((p) => p && p.configured(env) && p.kinds.includes(req.kind));
+  if (!list.length) throw new HttpError(503, "No configured provider supports this request. Set a provider key (see backend/README.md).");
+  return list;
+}
+
+// Tries each configured provider in order; if one fails (empty balance, outage), the next one is used.
+async function submitWithFallback(env, req) {
+  const errors = [];
+  for (const p of candidatesFor(env, req)) {
+    try {
+      return { provider: p, state: await p.submit(env, req) };
+    } catch (e) {
+      errors.push(e.message || String(e));
+    }
   }
-  throw new HttpError(503, "No configured provider supports this request. Set a provider key (see backend/README.md).");
+  throw new HttpError(502, errors.join(" | "));
 }
 
 // ---------------------------------------------------------------- access control
@@ -226,8 +237,7 @@ export default {
           delete body.provider; // only the owner can choose a provider
           await checkQuota(request, env, body.kind);
         }
-        const provider = pickProvider(env, body);
-        const state = await provider.submit(env, body);
+        const { provider, state } = await submitWithFallback(env, body);
         return json({ id: `${provider.name}.${b64.enc(state)}`, status: "QUEUED", progress: 0 });
       }
 

@@ -111,3 +111,24 @@ test("only the owner can choose a provider", async () => {
   const asOwner = await j(await worker.fetch(req("/v1/jobs", { method: "POST", headers: { "x-owner-key": "me" }, body: { ...job, provider: "replicate" } }), env));
   assert.ok(asOwner.body.id.startsWith("replicate."));
 });
+
+test("falls back to the next provider when the first one fails", async () => {
+  mockFetch(async (url) => {
+    if (url.includes("fal.run") || url.includes("queue.fal.run")) {
+      return new Response(JSON.stringify({ detail: "User is locked. Reason: Exhausted balance." }), { status: 403 });
+    }
+    return new Response(JSON.stringify({ id: "pred1", status: "starting" }), { status: 201 });
+  });
+  const env = { FAL_KEY: "k", REPLICATE_TOKEN: "r" };
+  const r = await j(await worker.fetch(req("/v1/jobs", { method: "POST", body: job }), env));
+  assert.equal(r.status, 200);
+  assert.ok(r.body.id.startsWith("replicate."));
+});
+
+test("reports every provider error when all fail", async () => {
+  mockFetch(async () => new Response(JSON.stringify({ detail: "Exhausted balance" }), { status: 403 }));
+  const env = { FAL_KEY: "k", REPLICATE_TOKEN: "r" };
+  const r = await j(await worker.fetch(req("/v1/jobs", { method: "POST", body: job }), env));
+  assert.equal(r.status, 502);
+  assert.match(r.body.error, /Exhausted balance.*\|/);
+});
