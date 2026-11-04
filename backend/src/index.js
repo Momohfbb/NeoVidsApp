@@ -32,7 +32,11 @@ async function call(url, init, what) {
   const text = await res.text();
   let json = null;
   try { json = JSON.parse(text); } catch { /* not json */ }
-  if (!res.ok) throw new HttpError(502, `${what}: ${res.status} ${(json && (json.detail || json.error || json.message)) || text.slice(0, 200)}`);
+  if (!res.ok) {
+    const d = json && (json.detail ?? json.error ?? json.message);
+    const msg = d == null ? text.slice(0, 200) : typeof d === "string" ? d : JSON.stringify(d).slice(0, 300);
+    throw new HttpError(502, `${what}: ${res.status} ${msg}`);
+  }
   return json;
 }
 
@@ -100,7 +104,13 @@ const fal = {
     }[kind];
   },
   async submit(env, r) {
-    const input = { prompt: fullPrompt(r), aspect_ratio: r.aspect };
+    const input = { prompt: fullPrompt(r) };
+    if (r.kind === "TEXT_TO_IMAGE") {
+      // fal image models take image_size presets rather than aspect_ratio
+      input.image_size = { "16:9": "landscape_16_9", "9:16": "portrait_16_9", "1:1": "square_hd" }[r.aspect] || "square_hd";
+    } else if (r.kind !== "IMAGE_EDIT") {
+      input.aspect_ratio = r.aspect;
+    }
     if (r.sourceImage) input.image_url = r.sourceImage;
     const q = await call(`https://queue.fal.run/${fal.model(env, r.kind)}`, {
       method: "POST",

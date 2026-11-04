@@ -58,6 +58,18 @@ fun App(vm: AppViewModel, onRecreate: () -> Unit) {
         return
     }
 
+    // Ask once for permission to notify when a creation is ready (Android 13+).
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val askNotifications = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+    }
+
     val tabs = listOf(
         Tab("create", R.string.tab_create, Icons.Default.AutoAwesome),
         Tab("library", R.string.tab_library, Icons.Default.VideoLibrary),

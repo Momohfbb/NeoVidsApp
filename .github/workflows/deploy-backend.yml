@@ -66,6 +66,7 @@ jobs:
             exit 1
           fi
           npm install --no-audit --no-fund
+          npm test
           # Diagnose the token before deploying (prints Cloudflare's answer, never the token itself).
           echo "Token length: ${#CLOUDFLARE_API_TOKEN}"
           curl -sS https://api.cloudflare.com/client/v4/user/tokens/verify -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | tee /tmp/verify.json | head -c 600; echo

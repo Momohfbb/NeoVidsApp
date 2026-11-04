@@ -90,4 +90,7 @@
     <string name="no">لا</string>
     <string name="conn_ok">متصل ✓ · مفتاح المالك مقبول: %1$s · المزوّدون: %2$s</string>
     <string name="conn_fail">تعذّر الوصول إلى الخادم: %1$s</string>
+    <string name="notif_channel">الإنشاءات المكتملة</string>
+    <string name="notif_done">جاهز: %1$s</string>
+    <string name="notif_failed">فشل: %1$s</string>
 </resources>
