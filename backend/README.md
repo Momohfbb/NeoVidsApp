@@ -7,7 +7,12 @@
 
 > أسماء النماذج الافتراضية قد تتغير عند المزوّدين. يمكن تغيير أي منها بمتغيرات مثل `FAL_MODEL_T2V` و`REPLICATE_MODEL_T2I`.
 
-## النشر (مرة واحدة)
+## النشر التلقائي من GitHub (الأسهل)
+في GitHub ← Settings ← Secrets and variables ← Actions أضف:
+`CLOUDFLARE_API_TOKEN` (قالب «Edit Cloudflare Workers») و`CLOUDFLARE_ACCOUNT_ID`، ومفتاح مزوّد واحد على الأقل (`FAL_KEY` أو `REPLICATE_TOKEN` أو `LUMA_KEY`)، و`APP_TOKEN` اختياريًا.
+ثم شغّل Actions ← **Deploy backend** ← Run workflow. عنوان الخادم يظهر في سجل التشغيل.
+
+## النشر اليدوي (مرة واحدة)
 ```bash
 cd backend
 npm install

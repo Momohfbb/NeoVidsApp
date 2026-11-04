@@ -1,0 +1,53 @@
+name: Deploy backend
+
+# Deploys backend/ to Cloudflare Workers whenever it changes on main (or on demand).
+# One-time setup in GitHub -> Settings -> Secrets and variables -> Actions:
+#   CLOUDFLARE_API_TOKEN   (template "Edit Cloudflare Workers")
+#   CLOUDFLARE_ACCOUNT_ID
+#   FAL_KEY or REPLICATE_TOKEN or LUMA_KEY   (at least one)
+#   APP_TOKEN              (optional, recommended; use the same value for the app build)
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", ".github/workflows/deploy-backend.yml"]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Cloudflare secrets
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID not set; skipping deploy."
+            echo "SKIP=1" >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: env.SKIP != '1'
+        with:
+          node-version: 20
+
+      - name: Deploy worker and provider secrets
+        if: env.SKIP != '1'
+        working-directory: backend
+        env:
+          FAL_KEY: ${{ secrets.FAL_KEY }}
+          REPLICATE_TOKEN: ${{ secrets.REPLICATE_TOKEN }}
+          LUMA_KEY: ${{ secrets.LUMA_KEY }}
+          APP_TOKEN: ${{ secrets.APP_TOKEN }}
+        run: |
+          npm install --no-audit --no-fund
+          npx wrangler deploy
+          for name in FAL_KEY REPLICATE_TOKEN LUMA_KEY APP_TOKEN; do
+            value="${!name}"
+            if [ -n "$value" ]; then
+              printf '%s' "$value" | npx wrangler secret put "$name"
+            fi
+          done
