@@ -5,6 +5,7 @@ name: Deploy backend
 #   CLOUDFLARE_API_TOKEN   (template "Edit Cloudflare Workers")
 #   CLOUDFLARE_ACCOUNT_ID
 #   FAL_KEY or REPLICATE_TOKEN or LUMA_KEY   (at least one)
+#   OWNER_KEY              (your personal key: unlimited use; enter it in the app Settings)
 #   APP_TOKEN              (optional, recommended; use the same value for the app build)
 
 on:
@@ -42,10 +43,21 @@ jobs:
           REPLICATE_TOKEN: ${{ secrets.REPLICATE_TOKEN }}
           LUMA_KEY: ${{ secrets.LUMA_KEY }}
           APP_TOKEN: ${{ secrets.APP_TOKEN }}
+          OWNER_KEY: ${{ secrets.OWNER_KEY }}
         run: |
           npm install --no-audit --no-fund
+          # Daily quotas for public users need a KV namespace; create it once, best effort.
+          ID=$(npx wrangler kv namespace list 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const a=JSON.parse(s.slice(s.indexOf("[")));const n=a.find(x=>x.title==="neovids-quota");console.log(n?n.id:"")}catch(e){console.log("")}})')
+          if [ -z "$ID" ]; then
+            ID=$(npx wrangler kv namespace create neovids-quota 2>&1 | grep -o '"id": *"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+          fi
+          if [ -n "$ID" ]; then
+            printf '\n[[kv_namespaces]]\nbinding = "QUOTA"\nid = "%s"\n' "$ID" >> wrangler.toml
+          else
+            echo "::warning::Could not set up the QUOTA KV namespace; daily limits will not be enforced."
+          fi
           npx wrangler deploy
-          for name in FAL_KEY REPLICATE_TOKEN LUMA_KEY APP_TOKEN; do
+          for name in FAL_KEY REPLICATE_TOKEN LUMA_KEY APP_TOKEN OWNER_KEY; do
             value="${!name}"
             if [ -n "$value" ]; then
               printf '%s' "$value" | npx wrangler secret put "$name"
