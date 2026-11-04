@@ -71,12 +71,16 @@ jobs:
           curl -sS https://api.cloudflare.com/client/v4/user/tokens/verify -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | tee /tmp/verify.json | head -c 600; echo
           grep -q '"success":true' /tmp/verify.json || { echo "::error::Cloudflare rejected CLOUDFLARE_API_TOKEN. Create a new token (template: Edit Cloudflare Workers) and replace the secret."; exit 1; }
           # Daily quotas for public users need a KV namespace; create it once, best effort.
-          ID=$(npx wrangler kv namespace list 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const a=JSON.parse(s.slice(s.indexOf("[")));const n=a.find(x=>x.title==="neovids-quota");console.log(n?n.id:"")}catch(e){console.log("")}})')
+          # (wrangler prefixes the title with the worker name, so match on "contains".)
+          find_kv() {
+            npx wrangler kv namespace list 2>/dev/null > /tmp/kvlist.txt || true
+            node -e 'const s=require("fs").readFileSync("/tmp/kvlist.txt","utf8");const m=s.match(/\[\s*\{[\s\S]*\}\s*\]/);try{const a=JSON.parse(m[0]);const n=a.find(x=>String(x.title).includes("neovids-quota"));console.log(n?n.id:"")}catch(e){console.log("")}'
+          }
+          ID=$(find_kv)
           if [ -z "$ID" ]; then
             npx wrangler kv namespace create neovids-quota > /tmp/kv.txt 2>&1 || true
-            # wrangler 3 prints: id = "abc"; newer versions print JSON: "id": "abc"
-            ID=$(grep -oE '"?id"?[[:space:]]*[:=][[:space:]]*"[0-9a-f]{32}"' /tmp/kv.txt | head -1 | grep -oE '[0-9a-f]{32}' || true)
-            if [ -z "$ID" ]; then sed 's/[0-9a-f]\{32\}/<id>/g' /tmp/kv.txt | tail -8; fi
+            ID=$(find_kv)
+            if [ -z "$ID" ]; then sed 's/[0-9a-f]\{32\}/<id>/g' /tmp/kv.txt | tail -8; head -c 300 /tmp/kvlist.txt | sed 's/[0-9a-f]\{32\}/<id>/g'; fi
           fi
           if [ -n "$ID" ]; then
             printf '\n[[kv_namespaces]]\nbinding = "QUOTA"\nid = "%s"\n' "$ID" >> wrangler.toml
