@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">نيوفيدز AI</string>
+    <string name="subtitle">مولّد الفيديو السحابي</string>
+    <string name="prompt_label">فكرة الفيديو الخاص بك</string>
+    <string name="generate">أنشئ الفيديو</string>
+    <string name="status_initial">صِف الفيديو الذي تريد إنشاءه.</string>
+    <string name="status_empty">اكتب وصفًا أولًا من فضلك.</string>
+    <string name="status_ready">الطلب جاهز: \"%1$s\" (الاتصال بالخادم لم يُربط بعد).</string>
+</resources>

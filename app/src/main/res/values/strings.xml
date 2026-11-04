@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NeoVids AI</string>
+    <string name="subtitle">Cloud video generator</string>
+    <string name="prompt_label">Your video idea</string>
+    <string name="generate">Generate video</string>
+    <string name="status_initial">Describe the video you want to generate.</string>
+    <string name="status_empty">Please write a description first.</string>
+    <string name="status_ready">Request ready: \"%1$s\" (server connection not set up yet).</string>
+</resources>
