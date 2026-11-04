@@ -56,7 +56,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _backend.value = url.trim().ifBlank { BuildConfig.BACKEND_URL }
     }
 
-    fun submit(req: GenRequest, onError: (String) -> Unit) {
+    /** [onDone] gets null on success, or the failure. Runs on the main thread. */
+    fun submit(req: GenRequest, onDone: (Throwable?) -> Unit) {
         viewModelScope.launch {
             val svc = current()
             try {
@@ -68,10 +69,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _items.value = listOf(item) + _items.value
                 persist()
                 track(id)
+                onDone(null)
             } catch (e: Exception) {
-                onError(e.message ?: "error")
+                onDone(e)
             }
         }
+    }
+
+    /** Asks the backend who we are and which providers it has configured. */
+    suspend fun testConnection(): Result<ServerStatus> {
+        if (_backend.value.isBlank()) return Result.failure(Exception("no server address"))
+        return runCatching { remoteService().status() }
     }
 
     fun addLocal(item: LibraryItem) {

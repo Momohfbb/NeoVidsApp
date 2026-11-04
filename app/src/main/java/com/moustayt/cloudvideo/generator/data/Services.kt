@@ -72,6 +72,10 @@ class RemoteService(baseUrl: String, private val ownerKey: String, private val d
         }.body<JobDto>().id
     }
 
+    suspend fun status(): ServerStatus = readable {
+        client.get("$base/v1/status") { auth() }.body()
+    }
+
     override suspend fun poll(id: String): JobDto = readable {
         client.get("$base/v1/jobs/${URLEncoder.encode(id, "UTF-8")}") { auth() }.body()
     }

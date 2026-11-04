@@ -9,10 +9,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -52,6 +55,7 @@ fun CreateScreen(vm: AppViewModel, onSubmitted: () -> Unit) {
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     var imageData by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
@@ -133,18 +137,32 @@ fun CreateScreen(vm: AppViewModel, onSubmitted: () -> Unit) {
                     kind.needsImage && imageData == null -> Toast.makeText(ctx, R.string.need_image, Toast.LENGTH_SHORT).show()
                     else -> {
                         busy = true
+                        error = null
                         vm.submit(
                             GenRequest(kind, prompt.trim(), style, aspect, duration, if (kind.needsImage) imageData else null),
-                        ) { err ->
-                            Toast.makeText(ctx, ctx.getString(R.string.error_generic, err), Toast.LENGTH_LONG).show()
+                        ) { e ->
                             busy = false
+                            if (e == null) onSubmitted() else error = e.message ?: e.toString()
                         }
-                        // Navigate right away; failures surface as a toast.
-                        onSubmitted()
-                        busy = false
                     }
                 }
             },
-        ) { Text(stringResource(R.string.generate)) }
+        ) {
+            if (busy) {
+                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            } else {
+                Text(stringResource(R.string.generate))
+            }
+        }
+
+        error?.let {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                Text(
+                    stringResource(R.string.error_generic, it),
+                    Modifier.padding(12.dp),
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+        }
     }
 }

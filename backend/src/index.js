@@ -192,6 +192,15 @@ export default {
 
       if (path === "/" || path === "/health") return json({ ok: true, service: "neovids-backend" });
 
+      if (path === "/v1/status" && request.method === "GET") {
+        return json({
+          ok: true,
+          owner: isOwner(request, env),
+          quota: !!env.QUOTA,
+          providers: Object.values(PROVIDERS).filter((p) => p.configured(env)).map((p) => p.name),
+        });
+      }
+
       if (path === "/v1/providers" && request.method === "GET") {
         return json(Object.values(PROVIDERS).filter((p) => p.configured(env)).map((p) => ({ name: p.name, kinds: p.kinds })));
       }
