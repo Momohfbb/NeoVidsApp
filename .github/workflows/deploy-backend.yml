@@ -1,7 +1,8 @@
 name: Deploy backend
 
 # Deploys backend/ to Cloudflare Workers whenever it changes on main (or on demand).
-# One-time setup in GitHub -> Settings -> Secrets and variables -> Actions:
+# One-time setup: add these as secrets of the GitHub environment "neo"
+# (Settings -> Environments -> neo -> Add environment secret) or as repository secrets:
 #   CLOUDFLARE_API_TOKEN   (template "Edit Cloudflare Workers")
 #   CLOUDFLARE_ACCOUNT_ID
 #   FAL_KEY or REPLICATE_TOKEN or LUMA_KEY   (at least one)
@@ -17,6 +18,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Reads secrets stored in the GitHub environment "neo" (repository-level secrets work too).
+    environment: neo
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
