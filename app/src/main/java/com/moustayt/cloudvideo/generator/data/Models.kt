@@ -48,3 +48,11 @@ data class LibraryItem(
     /** true for videos exported by the local editor */
     val local: Boolean = false,
 )
+
+@Serializable
+data class ServerStatus(
+    val ok: Boolean = true,
+    val owner: Boolean = false,
+    val quota: Boolean = false,
+    val providers: List<String> = emptyList(),
+)

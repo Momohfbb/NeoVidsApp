@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.moustayt.cloudvideo.generator.R
 import com.moustayt.cloudvideo.generator.data.AppViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(vm: AppViewModel, onRecreate: () -> Unit) {
@@ -29,6 +30,10 @@ fun SettingsScreen(vm: AppViewModel, onRecreate: () -> Unit) {
     val backend by vm.backend.collectAsState()
     var url by remember { mutableStateOf(vm.settings.backendUrl) }
     var ownerKey by remember { mutableStateOf(vm.settings.ownerKey) }
+    var testing by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<String?>(null) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(stringResource(R.string.tab_settings), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
@@ -52,6 +57,29 @@ fun SettingsScreen(vm: AppViewModel, onRecreate: () -> Unit) {
             visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
         )
         Button(onClick = { vm.setBackend(url); vm.settings.ownerKey = ownerKey }) { Text(stringResource(R.string.settings_save)) }
+        Button(
+            enabled = !testing,
+            onClick = {
+                vm.setBackend(url); vm.settings.ownerKey = ownerKey
+                testing = true
+                testResult = null
+                scope.launch {
+                    val r = vm.testConnection()
+                    testResult = r.fold(
+                        onSuccess = {
+                            ctx.getString(
+                                R.string.conn_ok,
+                                ctx.getString(if (it.owner) R.string.yes else R.string.no),
+                                it.providers.joinToString().ifBlank { "-" },
+                            )
+                        },
+                        onFailure = { ctx.getString(R.string.conn_fail, it.message ?: it.toString()) },
+                    )
+                    testing = false
+                }
+            },
+        ) { Text(stringResource(if (testing) R.string.testing else R.string.test_connection)) }
+        testResult?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
         Text(
             stringResource(if (backend.isBlank()) R.string.mode_demo else R.string.mode_live),
             color = MaterialTheme.colorScheme.primary,

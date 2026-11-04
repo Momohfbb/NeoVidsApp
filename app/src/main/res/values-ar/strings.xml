@@ -84,4 +84,10 @@
     <string name="mode_live">متصل بخادمك</string>
     <string name="settings_owner_key">مفتاح المالك</string>
     <string name="settings_owner_key_hint">مفتاحك الشخصي. به لا يطبّق خادمك أي حدود عليك. اتركه فارغًا إن كنت مستخدمًا عاديًا.</string>
+    <string name="test_connection">اختبار الاتصال</string>
+    <string name="testing">جارٍ الاختبار…</string>
+    <string name="yes">نعم</string>
+    <string name="no">لا</string>
+    <string name="conn_ok">متصل ✓ · مفتاح المالك مقبول: %1$s · المزوّدون: %2$s</string>
+    <string name="conn_fail">تعذّر الوصول إلى الخادم: %1$s</string>
 </resources>

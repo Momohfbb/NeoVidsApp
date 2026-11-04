@@ -84,4 +84,10 @@
     <string name="mode_live">Connected to your server</string>
     <string name="settings_owner_key">Owner key</string>
     <string name="settings_owner_key_hint">Your personal key. With it your own server applies no limits to you. Leave empty if you are a regular user.</string>
+    <string name="test_connection">Test connection</string>
+    <string name="testing">Testing…</string>
+    <string name="yes">yes</string>
+    <string name="no">no</string>
+    <string name="conn_ok">Connected ✓ · owner key accepted: %1$s · providers: %2$s</string>
+    <string name="conn_fail">Cannot reach the server: %1$s</string>
 </resources>
