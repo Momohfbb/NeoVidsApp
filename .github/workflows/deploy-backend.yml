@@ -76,7 +76,7 @@ jobs:
             npx wrangler kv namespace create neovids-quota > /tmp/kv.txt 2>&1 || true
             # wrangler 3 prints: id = "abc"; newer versions print JSON: "id": "abc"
             ID=$(grep -oE '"?id"?[[:space:]]*[:=][[:space:]]*"[0-9a-f]{32}"' /tmp/kv.txt | head -1 | grep -oE '[0-9a-f]{32}' || true)
-            [ -z "$ID" ] && sed 's/[0-9a-f]\{32\}/<id>/g' /tmp/kv.txt | tail -8
+            if [ -z "$ID" ]; then sed 's/[0-9a-f]\{32\}/<id>/g' /tmp/kv.txt | tail -8; fi
           fi
           if [ -n "$ID" ]; then
             printf '\n[[kv_namespaces]]\nbinding = "QUOTA"\nid = "%s"\n' "$ID" >> wrangler.toml
