@@ -28,6 +28,7 @@ fun SettingsScreen(vm: AppViewModel, onRecreate: () -> Unit) {
     val theme by vm.theme.collectAsState()
     val backend by vm.backend.collectAsState()
     var url by remember { mutableStateOf(vm.settings.backendUrl) }
+    var ownerKey by remember { mutableStateOf(vm.settings.ownerKey) }
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(stringResource(R.string.tab_settings), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
@@ -44,7 +45,13 @@ fun SettingsScreen(vm: AppViewModel, onRecreate: () -> Unit) {
         Text(stringResource(R.string.settings_backend), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.settings_backend_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(url, { url = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("https://neovids.example.workers.dev") })
-        Button(onClick = { vm.setBackend(url) }) { Text(stringResource(R.string.settings_save)) }
+        Text(stringResource(R.string.settings_owner_key), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.settings_owner_key_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedTextField(
+            ownerKey, { ownerKey = it }, Modifier.fillMaxWidth(), singleLine = true,
+            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+        )
+        Button(onClick = { vm.setBackend(url); vm.settings.ownerKey = ownerKey }) { Text(stringResource(R.string.settings_save)) }
         Text(
             stringResource(if (backend.isBlank()) R.string.mode_demo else R.string.mode_live),
             color = MaterialTheme.colorScheme.primary,

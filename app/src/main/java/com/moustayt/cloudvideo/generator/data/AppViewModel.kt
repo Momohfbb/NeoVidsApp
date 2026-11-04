@@ -26,6 +26,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val demo = DemoService()
     private var remote: RemoteService? = null
     private var remoteUrl = ""
+    private var remoteOwner = ""
 
     init {
         _items.value.filter { it.status == Status.QUEUED || it.status == Status.RUNNING && !it.local }
@@ -34,9 +35,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun remoteService(): RemoteService {
         val url = _backend.value
-        if (remote == null || remoteUrl != url) {
-            remote = RemoteService(url)
+        val owner = settings.ownerKey
+        if (remote == null || remoteUrl != url || remoteOwner != owner) {
+            remote = RemoteService(url, owner, settings.deviceId)
             remoteUrl = url
+            remoteOwner = owner
         }
         return remote!!
     }

@@ -82,4 +82,6 @@
     <string name="settings_about">NeoVids AI 2.0 — استوديو الفيديو والصور</string>
     <string name="mode_demo">الوضع التجريبي</string>
     <string name="mode_live">متصل بخادمك</string>
+    <string name="settings_owner_key">مفتاح المالك</string>
+    <string name="settings_owner_key_hint">مفتاحك الشخصي. به لا يطبّق خادمك أي حدود عليك. اتركه فارغًا إن كنت مستخدمًا عاديًا.</string>
 </resources>

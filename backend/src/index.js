@@ -148,7 +148,7 @@ const PROVIDERS = { replicate, fal, luma };
 // ---------------------------------------------------------------- http
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "content-type,x-app-token",
+  "Access-Control-Allow-Headers": "content-type,x-app-token,x-owner-key,x-device-id",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
 };
 const json = (obj, status = 200) =>
@@ -162,6 +162,24 @@ function pickProvider(env, req) {
     if (p && p.configured(env) && p.kinds.includes(req.kind)) return p;
   }
   throw new HttpError(503, "No configured provider supports this request. Set a provider key (see backend/README.md).");
+}
+
+// ---------------------------------------------------------------- access control
+// Owner (x-owner-key == OWNER_KEY): no limits from this server and may pick any provider.
+// Everyone else: daily quotas per device, set by you with FREE_DAILY_VIDEOS / FREE_DAILY_IMAGES.
+// Quotas need a KV namespace bound as QUOTA; without it they are not enforced.
+const isOwner = (request, env) => !!env.OWNER_KEY && request.headers.get("x-owner-key") === env.OWNER_KEY;
+
+async function checkQuota(request, env, kind) {
+  if (!env.QUOTA) return;
+  const device = (request.headers.get("x-device-id") || "").slice(0, 64);
+  if (!device) throw new HttpError(400, "x-device-id header is required");
+  const video = kind === "TEXT_TO_VIDEO" || kind === "IMAGE_TO_VIDEO";
+  const limit = parseInt((video ? env.FREE_DAILY_VIDEOS : env.FREE_DAILY_IMAGES) ?? (video ? "3" : "10"), 10);
+  const key = `q:${device}:${video ? "v" : "i"}:${new Date().toISOString().slice(0, 10)}`;
+  const used = parseInt((await env.QUOTA.get(key)) || "0", 10);
+  if (used >= limit) throw new HttpError(429, `Daily limit reached (${limit} ${video ? "videos" : "images"}). Try again tomorrow.`);
+  await env.QUOTA.put(key, String(used + 1), { expirationTtl: 172800 });
 }
 
 export default {
@@ -184,6 +202,11 @@ export default {
         if (String(body.prompt).length > 2000) throw new HttpError(400, "prompt too long");
         if (!["TEXT_TO_VIDEO", "IMAGE_TO_VIDEO", "TEXT_TO_IMAGE", "IMAGE_EDIT"].includes(body.kind)) throw new HttpError(400, "invalid kind");
         if ((body.kind === "IMAGE_TO_VIDEO" || body.kind === "IMAGE_EDIT") && !body.sourceImage) throw new HttpError(400, "sourceImage is required");
+        const owner = isOwner(request, env);
+        if (!owner) {
+          delete body.provider; // only the owner can choose a provider
+          await checkQuota(request, env, body.kind);
+        }
         const provider = pickProvider(env, body);
         const state = await provider.submit(env, body);
         return json({ id: `${provider.name}.${b64.enc(state)}`, status: "QUEUED", progress: 0 });
