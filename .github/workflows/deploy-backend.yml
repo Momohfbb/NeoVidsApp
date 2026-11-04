@@ -51,6 +51,10 @@ jobs:
           # CLOUDFLARE_ACCOUNT_ID is optional: with a single-account token, wrangler finds the account itself.
           [ -z "$CLOUDFLARE_ACCOUNT_ID" ] && unset CLOUDFLARE_ACCOUNT_ID
           # Pasted secrets often carry a trailing space or newline, which breaks HTTP headers: strip whitespace.
+          # If the whole "curl ... -H 'Authorization: Bearer <token>'" sample from Cloudflare was pasted, keep only the token.
+          if printf '%s' "$CLOUDFLARE_API_TOKEN" | grep -qE 'Bearer[[:space:]]+[A-Za-z0-9_-]+'; then
+            CLOUDFLARE_API_TOKEN=$(printf '%s' "$CLOUDFLARE_API_TOKEN" | grep -oE 'Bearer[[:space:]]+[A-Za-z0-9_-]+' | head -1 | awk '{print $2}')
+          fi
           CLOUDFLARE_API_TOKEN=$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')
           export CLOUDFLARE_API_TOKEN
           if [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
