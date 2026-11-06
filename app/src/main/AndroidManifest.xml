@@ -10,7 +10,7 @@
         android:label="@string/app_name"
         android:allowBackup="false"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.NoActionBar">
+        android:theme="@style/Theme.NeoVids">
 
         <activity
             android:name=".MainActivity"

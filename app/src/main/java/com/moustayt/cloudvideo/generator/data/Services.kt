@@ -20,8 +20,6 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.net.URLEncoder
 import java.util.UUID
@@ -32,7 +30,7 @@ const val DEMO_VIDEO = "https://storage.googleapis.com/exoplayer-test-media-0/Bi
 
 interface GenerationService {
     val isDemo: Boolean
-    suspend fun submit(req: GenRequest): String
+    suspend fun submit(req: GenRequest): JobDto
     suspend fun poll(id: String): JobDto
 }
 
@@ -56,20 +54,35 @@ class RemoteService(baseUrl: String, private val ownerKey: String, private val d
         header("x-device-id", deviceId)
     }
 
-    /** Turns {"error": "..."} bodies from the backend into readable messages (e.g. daily limit reached). */
+    /** Turns {"error": "...", "code": "..."} bodies from the backend into [ApiException]s the UI can localize. */
     private suspend fun <T> readable(block: suspend () -> T): T = try {
         block()
     } catch (e: ResponseException) {
-        val msg = runCatching { AppJson.parseToJsonElement(e.response.bodyAsText()).jsonObject["error"]?.jsonPrimitive?.content }.getOrNull()
-        throw Exception(msg ?: e.message)
+        val dto = runCatching { AppJson.decodeFromString<ErrorDto>(e.response.bodyAsText()) }.getOrNull()
+        val code = dto?.code ?: when (e.response.status.value) { 401 -> "UNAUTHORIZED"; 429 -> "QUOTA"; else -> null }
+        throw ApiException(code, dto?.error?.ifBlank { null } ?: e.message ?: "HTTP ${e.response.status.value}")
+    } catch (e: ApiException) {
+        throw e
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        throw ApiException("NETWORK", e.message ?: e.toString())
     }
 
-    override suspend fun submit(req: GenRequest): String = readable {
+    override suspend fun submit(req: GenRequest): JobDto = readable {
         client.post("$base/v1/jobs") {
             contentType(ContentType.Application.Json)
             auth()
             setBody(req)
-        }.body<JobDto>().id
+        }.body<JobDto>()
+    }
+
+    suspend fun assist(req: AssistRequest): String = readable {
+        client.post("$base/v1/assist") {
+            contentType(ContentType.Application.Json)
+            auth()
+            setBody(req)
+        }.body<AssistDto>().prompt
     }
 
     suspend fun status(): ServerStatus = readable {
@@ -85,8 +98,8 @@ class RemoteService(baseUrl: String, private val ownerKey: String, private val d
 class DemoService : GenerationService {
     override val isDemo = true
 
-    override suspend fun submit(req: GenRequest): String =
-        "demo.${req.kind.name}.${System.currentTimeMillis()}.${UUID.randomUUID().toString().take(8)}"
+    override suspend fun submit(req: GenRequest): JobDto =
+        JobDto("demo.${req.kind.name}.${System.currentTimeMillis()}.${UUID.randomUUID().toString().take(8)}", Status.QUEUED)
 
     override suspend fun poll(id: String): JobDto {
         val p = id.split(".")
@@ -131,6 +144,14 @@ class Settings(context: Context) {
         set(v) = p.edit().putString("owner_key", v.trim()).apply()
     val deviceId: String
         get() = p.getString("device_id", null) ?: UUID.randomUUID().toString().also { p.edit().putString("device_id", it).apply() }
+    /** Server-side AI translates and enriches prompts before generation. */
+    /** Explicit offline demo (samples instead of real generation). Off by default. */
+    var demoMode: Boolean
+        get() = p.getBoolean("demo", false)
+        set(v) = p.edit().putBoolean("demo", v).apply()
+    var smartPrompts: Boolean
+        get() = p.getBoolean("smart", true)
+        set(v) = p.edit().putBoolean("smart", v).apply()
     var onboarded: Boolean
         get() = p.getBoolean("onboarded", false)
         set(v) = p.edit().putBoolean("onboarded", v).apply()

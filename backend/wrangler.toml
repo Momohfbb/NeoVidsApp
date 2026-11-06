@@ -13,4 +13,10 @@ compatibility_date = "2024-11-01"
 [vars]
 FREE_DAILY_VIDEOS = "3"   # public users, per device per day
 FREE_DAILY_IMAGES = "10"
-PROVIDER_ORDER = "fal,replicate,luma"
+PROVIDER_ORDER = "fal,replicate,luma,cf"
+FREE_DAILY_ASSISTS = "40"  # AI prompt helper uses, per device per day
+
+# Cloudflare Workers AI: smart prompts (translate + enhance) and free image generation (provider "cf").
+# Free tier: 10,000 neurons per day on the Cloudflare account.
+[ai]
+binding = "AI"

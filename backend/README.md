@@ -41,3 +41,13 @@ npx wrangler deploy
 - **الجمهور:** حدود يومية لكل جهاز تحددها في `wrangler.toml`: `FREE_DAILY_VIDEOS` و`FREE_DAILY_IMAGES`.
 - تحتاج الحدود مساحة KV باسم `QUOTA` (النشر التلقائي ينشئها). بدونها لا تُطبَّق الحدود.
 - «بلا قيود» تعني بلا قيود من تطبيقك وخادمك. رصيد المزوّدين وسياسات المحتوى لديهم تبقى سارية، ولا يتجاوزها الخادم.
+
+## الذكاء المدمج (Cloudflare Workers AI)
+الخادم مربوط بـ Workers AI (`[ai]` في `wrangler.toml`)، ويوفّر بلا أي مفتاح إضافي:
+- **الوصف الذكي:** أي وصف غير إنجليزي (أو عند `smart: true`) يُعاد كتابته بالإنجليزية بتفاصيل سينمائية قبل إرساله للمزوّد. يُعاد للتطبيق في `finalPrompt`.
+- **`POST /v1/assist`**: `{mode: "enhance"|"surprise", prompt, kind, style, lang}` ← `{prompt}`.
+- **المزوّد `cf`**: توليد صور مجاني (FLUX.1 schnell) كخيار أخير بعد المزوّدين المدفوعين. الصور تُحفظ أسبوعًا في KV وتُقدَّم من `/v1/files/<key>`.
+- الحصة المجانية لـ Workers AI: نحو 10,000 «neuron» يوميًا على حساب Cloudflare.
+
+## رموز الأخطاء
+كل خطأ يعود بالشكل `{error, code}`، و`code` واحد من: `BALANCE` (نفد رصيد المزوّد)، `QUOTA`، `NO_PROVIDER`، `UNAUTHORIZED`، `BAD_REQUEST`، `PROVIDER`، `NOT_FOUND`. الطلبات الفاشلة لا تُحتسب من الحصة اليومية.

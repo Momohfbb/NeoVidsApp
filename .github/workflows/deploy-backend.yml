@@ -88,10 +88,43 @@ jobs:
           else
             echo "::warning::Could not set up the QUOTA KV namespace; daily limits will not be enforced."
           fi
-          npx wrangler deploy
+          if ! npx wrangler deploy; then
+            echo "::warning::Deploy with the Workers AI binding failed; deploying without smart prompts / free images."
+            python3 - <<'PY'
+          import re
+          s = open("wrangler.toml").read()
+          s = re.sub(r'\[ai\]\s*\nbinding = "AI"\n?', '', s)
+          open("wrangler.toml", "w").write(s)
+          PY
+            npx wrangler deploy
+          fi
           for name in FAL_KEY REPLICATE_TOKEN LUMA_KEY APP_TOKEN OWNER_KEY; do
             value="${!name}"
             if [ -n "$value" ]; then
               printf '%s' "$value" | npx wrangler secret put "$name"
             fi
           done
+
+      - name: Smoke test the live backend
+        if: env.SKIP != '1'
+        env:
+          APP_TOKEN: ${{ secrets.APP_TOKEN }}
+          OWNER_KEY: ${{ secrets.OWNER_KEY }}
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+        run: |
+          URL="${BACKEND_URL:-https://neovids-backend.milasmilas102.workers.dev}"
+          URL="${URL%/}"
+          sleep 5
+          H=(-H "x-app-token: $APP_TOKEN" -H "x-owner-key: $OWNER_KEY" -H "x-device-id: ci-smoke" -H "content-type: application/json")
+          echo "== status"; curl -sS -m 30 "${H[@]}" "$URL/v1/status"; echo
+          echo "== AI assistant"; curl -sS -m 60 "${H[@]}" -X POST "$URL/v1/assist" -d '{"mode":"enhance","prompt":"قطة تلعب في الثلج","kind":"TEXT_TO_IMAGE","style":"realistic"}'; echo
+          echo "== image job"; curl -sS -m 90 "${H[@]}" -X POST "$URL/v1/jobs" -d '{"kind":"TEXT_TO_IMAGE","prompt":"a red apple on a wooden table","style":"realistic","aspect":"1:1"}' | tee /tmp/job.json | head -c 600; echo
+          ID=$(node -e 'try{const j=JSON.parse(require("fs").readFileSync("/tmp/job.json","utf8"));process.stdout.write(j.id||"")}catch(e){}')
+          if [ -n "$ID" ]; then
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              R=$(curl -sS -m 30 "${H[@]}" "$URL/v1/jobs/$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$ID")")
+              echo "$R" | head -c 400; echo
+              echo "$R" | grep -qE '"status":"(DONE|FAILED)"' && break
+              sleep 4
+            done
+          fi

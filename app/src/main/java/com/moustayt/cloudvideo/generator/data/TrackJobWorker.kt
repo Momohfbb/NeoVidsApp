@@ -39,7 +39,13 @@ class TrackJobWorker(context: Context, params: WorkerParameters) : CoroutineWork
             try {
                 val dto = Backends.serviceFor(applicationContext, item.demo).poll(id)
                 failures = 0
-                val updated = item.copy(status = dto.status, progress = dto.progress, resultUrl = dto.resultUrl, error = dto.error)
+                val updated = item.copy(
+                    status = dto.status,
+                    progress = maxOf(item.progress, dto.progress),
+                    resultUrl = dto.resultUrl,
+                    error = dto.error,
+                    errorCode = dto.code,
+                )
                 dao.upsert(updated)
                 if (dto.status == Status.DONE || dto.status == Status.FAILED) {
                     Notifier.finished(applicationContext, updated)
@@ -49,14 +55,15 @@ class TrackJobWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 throw e
             } catch (e: Exception) {
                 failures++
-                if (failures >= 6) {
-                    val failed = item.copy(status = Status.FAILED, error = e.message ?: e.toString())
+                val fatal = e is ApiException && (e.code == "UNAUTHORIZED" || e.code == "NOT_FOUND")
+                if (failures >= 6 || fatal) {
+                    val failed = item.copy(status = Status.FAILED, error = e.message ?: e.toString(), errorCode = (e as? ApiException)?.code)
                     dao.upsert(failed)
                     Notifier.finished(applicationContext, failed)
                     return Result.success()
                 }
             }
-            delay(2500)
+            delay(3000)
         }
         return Result.retry()
     }
@@ -95,7 +102,8 @@ object Notifier {
         val text = if (item.status == Status.DONE) context.getString(R.string.notif_done, item.prompt)
         else context.getString(R.string.notif_failed, item.error ?: "")
         val n = NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setColor(0xFF7C5CFF.toInt())
             .setContentTitle(context.getString(R.string.app_name))
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
