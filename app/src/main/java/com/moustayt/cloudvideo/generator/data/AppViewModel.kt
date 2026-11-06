@@ -17,7 +17,15 @@ import java.io.File
 import java.util.Locale
 
 /** A prompt handed to the Create screen from elsewhere (e.g. "Remix" in the detail screen). */
-data class Draft(val kind: Kind, val prompt: String, val style: String, val aspect: String, val durationSec: Int)
+data class Draft(
+    val kind: Kind,
+    val prompt: String,
+    val style: String,
+    val aspect: String,
+    val durationSec: Int,
+    /** An image already online (e.g. an earlier creation) to animate or edit. */
+    val sourceUrl: String? = null,
+)
 
 class AppViewModel(private val app: Application) : AndroidViewModel(app) {
     val settings = Settings(app)
@@ -82,25 +90,101 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
 
     fun consumeDraft() { _draft.value = null }
 
+    /** Opens Create with any prompt (e.g. from an Explore template). */
+    fun useTemplate(kind: Kind, prompt: String, style: String, aspect: String) {
+        _draft.value = Draft(kind, prompt, style, aspect, 5)
+    }
+
+    /** "Animate" a finished image: image-to-video from its URL. */
+    fun animate(item: LibraryItem) {
+        _draft.value = Draft(Kind.IMAGE_TO_VIDEO, "", item.style.ifBlank { "cinematic" }, item.aspect.ifBlank { "16:9" }, 5, item.resultUrl)
+    }
+
+    /** "Edit" a finished image with words. */
+    fun editImage(item: LibraryItem) {
+        _draft.value = Draft(Kind.IMAGE_EDIT, "", item.style, item.aspect, 5, item.resultUrl)
+    }
+
+    fun toggleFavorite(item: LibraryItem) {
+        viewModelScope.launch { dao.setFavorite(item.id, !item.favorite) }
+    }
+
+    fun group(groupId: String) = dao.observeGroup(groupId)
+
+    /** AI director: one idea -> title + scenes. */
+    fun writeStory(idea: String, scenes: Int, style: String, onDone: (Result<StoryDto>) -> Unit) {
+        viewModelScope.launch {
+            val r = runCatching {
+                if (Backends.backendUrl(app).isBlank()) throw ApiException("NO_PROVIDER", "demo mode")
+                withTimeout(90_000) {
+                    Backends.remote(app).story(AssistRequest("story", idea, Kind.TEXT_TO_VIDEO, style, lang(), scenes))
+                }
+            }.recoverCatching { e -> if (e is TimeoutCancellationException) throw ApiException("TIMEOUT", "timeout") else throw e }
+            onDone(r)
+        }
+    }
+
+    /** Starts one video job per scene, all in one group. Returns the group id, or the first failure. */
+    fun startStory(title: String, scenes: List<String>, style: String, aspect: String, quality: String, onDone: (Result<String>) -> Unit) {
+        viewModelScope.launch {
+            val groupId = "story-" + java.util.UUID.randomUUID().toString().take(12)
+            val r = runCatching {
+                val svc = Backends.current(app)
+                val seed = (1..999_999).random() // same seed keeps the look consistent between shots
+                scenes.forEachIndexed { i, scene ->
+                    val req = GenRequest(Kind.TEXT_TO_VIDEO, scene, style, aspect, 5, smart = settings.smartPrompts, quality = quality, seed = seed)
+                    val job = withTimeout(90_000) { svc.submit(req) }
+                    dao.upsert(
+                        LibraryItem(
+                            id = job.id, kind = Kind.TEXT_TO_VIDEO, prompt = scene, style = style, aspect = aspect,
+                            createdAt = System.currentTimeMillis(), status = Status.QUEUED, demo = svc.isDemo,
+                            finalPrompt = job.finalPrompt, groupId = groupId, groupTitle = title, sceneIndex = i,
+                        ),
+                    )
+                    TrackJobWorker.enqueue(app, job.id)
+                }
+                groupId
+            }.recoverCatching { e -> if (e is TimeoutCancellationException) throw ApiException("TIMEOUT", "timeout") else throw e }
+            onDone(r)
+        }
+    }
+
     private fun lang(): String {
         val l = settings.language.takeIf { it != "system" } ?: Locale.getDefault().language
         return if (l == "ar") "ar" else "en"
     }
 
-    /** [onDone] gets null on success, or the failure. Runs on the main thread. */
-    fun submit(req: GenRequest, onDone: (Throwable?) -> Unit) {
+    /**
+     * Submits [count] variations of [req] (different seeds). [onDone] gets null when at least one
+     * started, or the failure. Runs on the main thread.
+     */
+    fun submit(req: GenRequest, count: Int = 1, onDone: (Throwable?) -> Unit) {
         viewModelScope.launch {
             try {
                 val svc = Backends.current(app)
-                val job = withTimeout(90_000) { svc.submit(req.copy(smart = settings.smartPrompts)) }
-                dao.upsert(
-                    LibraryItem(
-                        id = job.id, kind = req.kind, prompt = req.prompt, style = req.style, aspect = req.aspect,
-                        createdAt = System.currentTimeMillis(), status = Status.QUEUED, demo = svc.isDemo,
-                        finalPrompt = job.finalPrompt, durationSec = req.durationSec,
-                    ),
-                )
-                TrackJobWorker.enqueue(app, job.id)
+                var started = 0
+                var firstError: Exception? = null
+                for (n in 0 until count.coerceIn(1, 4)) {
+                    try {
+                        val seed = if (count > 1) (1..999_999).random() else req.seed
+                        val job = withTimeout(90_000) { svc.submit(req.copy(smart = settings.smartPrompts, seed = seed)) }
+                        dao.upsert(
+                            LibraryItem(
+                                id = job.id, kind = req.kind, prompt = req.prompt, style = req.style, aspect = req.aspect,
+                                createdAt = System.currentTimeMillis(), status = Status.QUEUED, demo = svc.isDemo,
+                                finalPrompt = job.finalPrompt, durationSec = req.durationSec,
+                            ),
+                        )
+                        TrackJobWorker.enqueue(app, job.id)
+                        started++
+                    } catch (e: TimeoutCancellationException) {
+                        if (firstError == null) firstError = ApiException("TIMEOUT", "Server timed out")
+                    } catch (e: Exception) {
+                        if (firstError == null) firstError = e
+                        if (e is ApiException && e.code in setOf("BALANCE", "QUOTA", "PRO_LOCKED", "UNAUTHORIZED")) break
+                    }
+                }
+                if (started == 0) throw firstError ?: ApiException(null, "failed")
                 onDone(null)
             } catch (e: TimeoutCancellationException) {
                 onDone(ApiException("TIMEOUT", "Server timed out"))
@@ -137,6 +221,8 @@ class AppViewModel(private val app: Application) : AndroidViewModel(app) {
         return runCatching { withTimeout(30_000) { Backends.remote(app).status() } }
             .onSuccess { _server.value = it }
     }
+
+    suspend fun addLocalNow(item: LibraryItem) = dao.upsert(item)
 
     fun addLocal(item: LibraryItem) {
         viewModelScope.launch { dao.upsert(item) }

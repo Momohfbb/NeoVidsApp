@@ -23,6 +23,12 @@ interface ItemDao {
     @Query("SELECT * FROM items WHERE status IN ('QUEUED', 'RUNNING') AND is_local = 0")
     suspend fun active(): List<LibraryItem>
 
+    @Query("SELECT * FROM items WHERE groupId = :groupId ORDER BY sceneIndex ASC, createdAt ASC")
+    fun observeGroup(groupId: String): Flow<List<LibraryItem>>
+
+    @Query("UPDATE items SET favorite = :fav WHERE id = :id")
+    suspend fun setFavorite(id: String, fav: Boolean)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(item: LibraryItem)
 
@@ -44,7 +50,16 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
-@Database(entities = [LibraryItem::class], version = 2, exportSchema = false)
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE items ADD COLUMN groupId TEXT")
+        db.execSQL("ALTER TABLE items ADD COLUMN groupTitle TEXT")
+        db.execSQL("ALTER TABLE items ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE items ADD COLUMN sceneIndex INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+@Database(entities = [LibraryItem::class], version = 3, exportSchema = false)
 abstract class AppDb : RoomDatabase() {
     abstract fun items(): ItemDao
 
@@ -53,7 +68,7 @@ abstract class AppDb : RoomDatabase() {
 
         fun get(context: Context): AppDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, AppDb::class.java, "neovids.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build().also { instance = it }
         }
     }

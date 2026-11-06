@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.AutoFixHigh
+import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.Casino
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Image
@@ -90,7 +91,7 @@ fun styleLabel(style: String): Int = when (style) {
 private data class KindInfo(val kind: Kind, val title: Int, val sub: Int, val icon: ImageVector)
 
 @Composable
-fun CreateScreen(vm: AppViewModel, onSubmitted: () -> Unit) {
+fun CreateScreen(vm: AppViewModel, onSubmitted: () -> Unit, onStory: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val backend by vm.backend.collectAsState()
@@ -108,16 +109,27 @@ fun CreateScreen(vm: AppViewModel, onSubmitted: () -> Unit) {
     var assisting by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<Throwable?>(null) }
     var smart by remember { mutableStateOf(vm.settings.smartPrompts) }
+    var count by rememberSaveable { mutableStateOf(1) }
+    var quality by rememberSaveable { mutableStateOf("fast") }
 
     LaunchedEffect(draft) {
         draft?.let {
             kind = it.kind; prompt = it.prompt; style = it.style; aspect = it.aspect; duration = it.durationSec
+            if (it.sourceUrl != null) imageUri = Uri.parse(it.sourceUrl)
             error = null
             vm.consumeDraft()
         }
     }
     // Re-encode after process death / rotation.
-    LaunchedEffect(imageUri) { imageData = imageUri?.let { encodeImage(ctx, it) } }
+    LaunchedEffect(imageUri) {
+        val u = imageUri
+        // Earlier creations are already online: send their URL instead of re-uploading the pixels.
+        imageData = when {
+            u == null -> null
+            u.scheme == "http" || u.scheme == "https" -> u.toString()
+            else -> encodeImage(ctx, u)
+        }
+    }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) imageUri = uri
@@ -185,6 +197,8 @@ fun CreateScreen(vm: AppViewModel, onSubmitted: () -> Unit) {
                 }
             }
         }
+
+        StoryTile(onStory)
 
         AnimatedVisibility(kind.needsImage) {
             ImagePickerCard(imageUri, onPick = { picker.launch("image/*") }, onClear = { imageUri = null })
@@ -268,6 +282,11 @@ fun CreateScreen(vm: AppViewModel, onSubmitted: () -> Unit) {
         if (kind.isVideo) {
             SectionTitle(stringResource(R.string.duration))
             ChipRow(listOf(5, 10), duration, { ctx.getString(R.string.seconds, it) }) { duration = it }
+            SectionTitle(stringResource(R.string.quality))
+            QualityChips(quality) { quality = it }
+        } else {
+            SectionTitle(stringResource(R.string.variations))
+            ChipRow(listOf(1, 2, 4), count, { "×$it" }) { count = it }
         }
 
         GradientButton(
@@ -286,7 +305,9 @@ fun CreateScreen(vm: AppViewModel, onSubmitted: () -> Unit) {
                             GenRequest(
                                 kind, prompt.trim(), style, if (kind == Kind.IMAGE_EDIT) "" else aspect, duration,
                                 if (kind.needsImage) imageData else null,
+                                quality = if (kind.isVideo) quality else "fast",
                             ),
+                            count = if (kind.isVideo) 1 else count,
                         ) { e ->
                             busy = false
                             if (e == null) onSubmitted() else error = e
@@ -301,6 +322,28 @@ fun CreateScreen(vm: AppViewModel, onSubmitted: () -> Unit) {
             else ErrorCard(friendlyError(e), e.message)
         }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun StoryTile(onClick: () -> Unit) {
+    val shape = MaterialTheme.shapes.large
+    Row(
+        Modifier.fillMaxWidth().clip(shape)
+            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Brand.Violet.copy(alpha = 0.9f), Brand.Pink.copy(alpha = 0.85f))))
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Outlined.AutoStories, null, tint = Color.White)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.kind_story), style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Text(stringResource(R.string.kind_story_sub), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f))
+        }
+        Text("→", color = Color.White, style = MaterialTheme.typography.titleLarge)
     }
 }
 

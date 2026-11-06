@@ -15,13 +15,32 @@ android {
         applicationId = "com.moustayt.cloudvideo.generator"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "3.0.0"
+        versionCode = 4
+        versionName = "4.0.0"
 
         fun q(v: Any?) = "\"" + (v?.toString() ?: "").replace("\"", "") + "\""
         // Empty means "use the official server" (see Backends.DEFAULT_BACKEND).
         buildConfigField("String", "BACKEND_URL", q(project.findProperty("backendUrl")))
         buildConfigField("String", "APP_TOKEN", q(project.findProperty("appToken")))
+    }
+
+    // Release signing for Google Play: set these as GitHub repository secrets (see docs/publishing.md).
+    val keystoreFile = rootProject.file("release.keystore")
+    signingConfigs {
+        create("release") {
+            if (keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            if (keystoreFile.exists()) signingConfig = signingConfigs.getByName("release")
+        }
     }
 
     compileOptions {

@@ -25,6 +25,11 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Movie
+import androidx.compose.material.icons.outlined.AutoFixHigh
+import androidx.compose.material.icons.outlined.AutoStories
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -75,7 +80,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(UnstableApi::class)
 @Composable
-fun DetailScreen(vm: AppViewModel, id: String, onBack: () -> Unit) {
+fun DetailScreen(vm: AppViewModel, id: String, onBack: () -> Unit, onStory: (String) -> Unit) {
     val items by vm.items.collectAsState()
     val item = items.firstOrNull { it.id == id }
     val ctx = LocalContext.current
@@ -98,7 +103,15 @@ fun DetailScreen(vm: AppViewModel, id: String, onBack: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) }
             Spacer(Modifier.width(4.dp))
-            if (item != null) Text(statusText(item, now), style = MaterialTheme.typography.titleMedium)
+            if (item != null) Text(statusText(item, now), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            if (item != null) {
+                IconButton(onClick = { vm.toggleFavorite(item) }) {
+                    Icon(
+                        if (item.favorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        stringResource(R.string.favorite), tint = if (item.favorite) Brand.Pink else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
         if (item == null) return@Column
 
@@ -175,6 +188,15 @@ fun DetailScreen(vm: AppViewModel, id: String, onBack: () -> Unit) {
                     }
                 }
             }
+        }
+        if (item.status == Status.DONE && !item.kind.isVideo && item.resultUrl?.startsWith("http") == true) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActionButton(stringResource(R.string.animate), Icons.Outlined.Movie, Modifier.weight(1f), primary = true) { vm.animate(item) }
+                ActionButton(stringResource(R.string.edit_image), Icons.Outlined.AutoFixHigh, Modifier.weight(1f)) { vm.editImage(item) }
+            }
+        }
+        item.groupId?.let { g ->
+            ActionButton(stringResource(R.string.story_open), Icons.Outlined.AutoStories, Modifier.fillMaxWidth()) { onStory(g) }
         }
         retryError?.let { ErrorCard(friendlyError(it), (it as? ApiException)?.message ?: it.message) }
 
