@@ -44,9 +44,33 @@ class DataTest {
         assertEquals(Status.DONE, job.status)
         assertEquals("https://x/y.png", job.resultUrl)
 
-        val st = AppJson.decodeFromString<ServerStatus>("""{"ok":true,"owner":true,"quota":false,"providers":["fal"]}""")
+        val st = AppJson.decodeFromString<ServerStatus>("""{"ok":true,"owner":true,"quota":false,"ai":true,"providers":["fal","cf"]}""")
         assertTrue(st.owner)
-        assertEquals(listOf("fal"), st.providers)
+        assertTrue(st.ai)
+        assertEquals(listOf("fal", "cf"), st.providers)
+
+        val failed = AppJson.decodeFromString<JobDto>("""{"id":"x","status":"FAILED","error":"fal: 403","code":"BALANCE"}""")
+        assertEquals("BALANCE", failed.code)
+        val created = AppJson.decodeFromString<JobDto>("""{"id":"cf.x","status":"QUEUED","finalPrompt":"A cat","provider":"cf"}""")
+        assertEquals("A cat", created.finalPrompt)
+    }
+
+    @Test
+    fun requestCarriesSmartFlag() {
+        val json = AppJson.encodeToString(GenRequest(Kind.TEXT_TO_VIDEO, "قطة", "anime", "16:9"))
+        assertTrue(json.contains("\"smart\":true"))
+    }
+
+    @Test
+    fun estimatedProgressMovesWithTimeButNeverFinishesEarly() {
+        val start = 1_000_000L
+        val item = LibraryItem("v", Kind.TEXT_TO_VIDEO, "p", "", "16:9", start, Status.RUNNING, 0.1f)
+        val early = com.moustayt.cloudvideo.generator.ui.estimatedProgress(item, start + 1_000)
+        val later = com.moustayt.cloudvideo.generator.ui.estimatedProgress(item, start + 60_000)
+        val veryLate = com.moustayt.cloudvideo.generator.ui.estimatedProgress(item, start + 10 * 60_000)
+        assertTrue(later > early)
+        assertTrue(veryLate < 1f)
+        assertEquals(1f, com.moustayt.cloudvideo.generator.ui.estimatedProgress(item.copy(status = Status.DONE), start), 0f)
     }
 
     @Test
@@ -58,7 +82,7 @@ class DataTest {
     @Test
     fun demoServiceProgressesAndFinishes() = runTest {
         val demo = DemoService()
-        val id = demo.submit(GenRequest(Kind.TEXT_TO_IMAGE, "x", "anime", "1:1"))
+        val id = demo.submit(GenRequest(Kind.TEXT_TO_IMAGE, "x", "anime", "1:1")).id
         val early = demo.poll(id)
         assertTrue(early.status == Status.QUEUED || early.status == Status.RUNNING)
         assertNull(early.resultUrl)

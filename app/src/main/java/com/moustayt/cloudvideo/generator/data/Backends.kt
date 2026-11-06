@@ -9,8 +9,14 @@ object Backends {
     private var remote: RemoteService? = null
     private var remoteKey = ""
 
-    fun backendUrl(context: Context): String =
-        Settings(context).backendUrl.ifBlank { BuildConfig.BACKEND_URL }
+    /** The official NeoVids server, used when nothing else is configured. */
+    const val DEFAULT_BACKEND = "https://neovids-backend.milasmilas102.workers.dev"
+
+    fun backendUrl(context: Context): String {
+        val s = Settings(context)
+        if (s.demoMode) return ""
+        return s.backendUrl.ifBlank { BuildConfig.BACKEND_URL }.ifBlank { DEFAULT_BACKEND }
+    }
 
     fun remote(context: Context): RemoteService = synchronized(this) {
         val s = Settings(context)

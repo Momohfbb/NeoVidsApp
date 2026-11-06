@@ -69,7 +69,7 @@ fun EditorScreen(vm: AppViewModel, onExported: () -> Unit) {
     }
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text(stringResource(R.string.editor_title), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.editor_title), style = MaterialTheme.typography.headlineMedium)
         Text(stringResource(R.string.editor_hint), color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         OutlinedButton(onClick = { picker.launch("video/*") }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.editor_pick)) }
@@ -84,8 +84,10 @@ fun EditorScreen(vm: AppViewModel, onExported: () -> Unit) {
             RangeSlider(value = range, onValueChange = { range = it })
         }
 
-        Button(
-            enabled = clips.isNotEmpty() && !exporting,
+        GradientButton(
+            text = stringResource(if (exporting) R.string.editor_exporting else R.string.editor_export),
+            enabled = clips.isNotEmpty(),
+            loading = exporting,
             modifier = Modifier.fillMaxWidth(),
             onClick = {
                 exporting = true
@@ -114,6 +116,7 @@ fun EditorScreen(vm: AppViewModel, onExported: () -> Unit) {
                                     id = "local.${System.currentTimeMillis()}", kind = Kind.TEXT_TO_VIDEO,
                                     prompt = ctx.getString(R.string.editor_prompt), createdAt = System.currentTimeMillis(),
                                     status = Status.DONE, progress = 1f, resultUrl = Uri.fromFile(out).toString(), local = true,
+                                    aspect = "16:9",
                                 ),
                             )
                             Toast.makeText(ctx, R.string.editor_done, Toast.LENGTH_SHORT).show()
@@ -128,6 +131,6 @@ fun EditorScreen(vm: AppViewModel, onExported: () -> Unit) {
                     .build()
                 transformer.start(composition, out.absolutePath)
             },
-        ) { Text(stringResource(if (exporting) R.string.editor_exporting else R.string.editor_export)) }
+        )
     }
 }

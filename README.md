@@ -1,15 +1,23 @@
+<p align="center"><img src="docs/brand.png" alt="NeoVids AI" width="720"></p>
+
 # NeoVids AI
 
-تطبيق Android (Jetpack Compose) يدعم العربية والإنجليزية.
+استوديو فيديو وصور بالذكاء الاصطناعي على Android (Jetpack Compose)، بالعربية والإنجليزية.
 
-## الحصول على ملف APK
-أسهل طريقة من الهاتف: https://github.com/Momohfbb/NeoVidsApp/releases/latest/download/app-debug.apk
+- **نص إلى فيديو، صورة إلى فيديو، نص إلى صورة، تعديل الصور بالكلمات.**
+- **الوصف الذكي:** يترجم الخادم وصفك العربي إلى الإنجليزية ويضيف الإضاءة وحركة الكاميرا والأسلوب قبل التوليد.
+- **«حسّن بالذكاء» و«فاجئني»:** كاتب أوامر محترف وأفكار جديدة بلمسة.
+- **مولّد صور مجاني مدمج** (Cloudflare Workers AI) يعمل حتى لو نفد رصيد المزوّدين المدفوعين.
+- مكتبة بشبكة صور مصغّرة، متابعة في الخلفية مع إشعار، حفظ ومشاركة، «أعد الإبداع» و«أعد المحاولة»، ومحرّر قصّ ودمج.
 
-كل دفع (push) إلى الفرع `main` يشغّل GitHub Actions الذي يبني `app-debug.apk`.
-افتح تبويب **Actions** ← آخر تشغيل لـ **Build APK** ← قسم **Artifacts** ← `NeoVids-AI-debug-apk`.
+## تحميل التطبيق
+من الهاتف مباشرة: https://github.com/Momohfbb/NeoVidsApp/releases/download/latest/app-debug.apk
 
-## البناء محليًا
-```
-./gradlew assembleDebug
-```
-يتطلب Java 17 و Android SDK 35.
+التطبيق متصل تلقائيًا بالخادم الرسمي، لا حاجة لأي إعداد.
+
+## البناء
+كل دفع إلى `main` يبني الـ APK في GitHub Actions وينشره في الرابط أعلاه، وينشر الخادم (`backend/`) إلى Cloudflare ويختبره.
+محليًا: `./gradlew assembleDebug` (Java 17 و Android SDK 35).
+
+## الهوية البصرية
+الشعار: `docs/logo.svg` (مدار الذكاء حول زر التشغيل، مع شرارة الإبداع). الألوان: بنفسجي `#7C5CFF`، سماوي `#22D3EE`، وردي `#F472B6`، ليلي `#0E0B24`.

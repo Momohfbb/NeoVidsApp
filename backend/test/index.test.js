@@ -12,7 +12,15 @@ function mockFetch(handler) {
 }
 test.afterEach(() => { globalThis.fetch = realFetch; calls.length = 0; });
 
-const kv = () => { const m = new Map(); return { get: async (k) => m.get(k) ?? null, put: async (k, v) => void m.set(k, v) }; };
+const kv = () => {
+  const m = new Map();
+  return {
+    m,
+    get: async (k) => m.get(k)?.v ?? null,
+    getWithMetadata: async (k) => ({ value: m.get(k)?.v ?? null, metadata: m.get(k)?.meta ?? null }),
+    put: async (k, v, o) => void m.set(k, { v, meta: o && o.metadata }),
+  };
+};
 const req = (path, { method = "GET", headers = {}, body } = {}) =>
   new Request("https://x" + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
 const job = { kind: "TEXT_TO_IMAGE", prompt: "a cat", style: "anime", aspect: "16:9", durationSec: 5 };
@@ -33,7 +41,7 @@ test("APP_TOKEN is enforced when set", async () => {
 test("status reports owner, quota and providers", async () => {
   const env = { OWNER_KEY: "me", FAL_KEY: "k", QUOTA: kv() };
   const owner = await j(await worker.fetch(req("/v1/status", { headers: { "x-owner-key": "me" } }), env));
-  assert.deepEqual(owner.body, { ok: true, owner: true, quota: true, providers: ["fal"] });
+  assert.deepEqual(owner.body, { ok: true, owner: true, quota: true, ai: false, providers: ["fal"] });
   const pub = await j(await worker.fetch(req("/v1/status"), env));
   assert.equal(pub.body.owner, false);
 });
@@ -131,4 +139,109 @@ test("reports every provider error when all fail", async () => {
   const r = await j(await worker.fetch(req("/v1/jobs", { method: "POST", body: job }), env));
   assert.equal(r.status, 502);
   assert.match(r.body.error, /Exhausted balance.*\|/);
+});
+
+test("failed submissions do not use up the daily quota", async () => {
+  mockFetch(() => new Response(JSON.stringify({ detail: "Exhausted balance" }), { status: 403 }));
+  const env = { FAL_KEY: "k", QUOTA: kv(), FREE_DAILY_IMAGES: "1" };
+  const post = () => worker.fetch(req("/v1/jobs", { method: "POST", headers: { "x-device-id": "d" }, body: job }), env);
+  for (let i = 0; i < 3; i++) {
+    const r = await j(await post());
+    assert.equal(r.status, 502);
+    assert.equal(r.body.code, "BALANCE");
+  }
+});
+
+test("fal video: LTX gets no aspect/duration, other models do; negative prompt is sent", async () => {
+  mockFetch(() => new Response(JSON.stringify({ status_url: "s", response_url: "r" })));
+  const v = { ...job, kind: "TEXT_TO_VIDEO", durationSec: 10 };
+  await worker.fetch(req("/v1/jobs", { method: "POST", body: v }), { FAL_KEY: "k" });
+  let sent = JSON.parse(calls[0].init.body);
+  assert.equal(sent.aspect_ratio, undefined);
+  assert.ok(sent.negative_prompt);
+  calls.length = 0;
+  mockFetch(() => new Response(JSON.stringify({ status_url: "s", response_url: "r" })));
+  await worker.fetch(req("/v1/jobs", { method: "POST", body: v }), { FAL_KEY: "k", FAL_MODEL_T2V: "fal-ai/kling-video/v2/master/text-to-video" });
+  sent = JSON.parse(calls[0].init.body);
+  assert.equal(sent.aspect_ratio, "16:9");
+  assert.equal(sent.duration, "10");
+});
+
+test("fal job that completes with an error is reported as FAILED", async () => {
+  mockFetch((url) => {
+    if (url === "https://queue.fal.run/fal-ai/flux/schnell") return new Response(JSON.stringify({ status_url: "https://q/s", response_url: "https://q/r" }));
+    if (url === "https://q/s") return new Response(JSON.stringify({ status: "COMPLETED" }));
+    return new Response(JSON.stringify({ detail: [{ msg: "bad input" }] }), { status: 422 });
+  });
+  const env = { FAL_KEY: "k" };
+  const created = await j(await worker.fetch(req("/v1/jobs", { method: "POST", body: job }), env));
+  const st = await j(await worker.fetch(req("/v1/jobs/" + encodeURIComponent(created.body.id)), env));
+  assert.equal(st.body.status, "FAILED");
+  assert.match(st.body.error, /bad input/);
+});
+
+const fakeAI = (calls) => ({
+  run: async (model, input) => {
+    calls.push({ model, input });
+    if (model.includes("flux")) return { image: btoa("JPEGDATA") };
+    return { response: "\"A lone astronaut walks across a violet desert at dusk, cinematic.\"" };
+  },
+});
+
+test("Arabic prompts are turned into English smart prompts before generation", async () => {
+  mockFetch(() => new Response(JSON.stringify({ status_url: "s", response_url: "r" })));
+  const ai = [];
+  const env = { FAL_KEY: "k", AI: fakeAI(ai) };
+  const r = await j(await worker.fetch(req("/v1/jobs", { method: "POST", body: { ...job, prompt: "رائد فضاء في صحراء بنفسجية" } }), env));
+  assert.equal(r.status, 200);
+  assert.equal(r.body.finalPrompt, "A lone astronaut walks across a violet desert at dusk, cinematic.");
+  assert.equal(JSON.parse(calls[0].init.body).prompt, r.body.finalPrompt);
+  // English prompts without smart mode are sent as they are
+  ai.length = 0;
+  const plain = await j(await worker.fetch(req("/v1/jobs", { method: "POST", body: job }), env));
+  assert.equal(plain.body.finalPrompt, null);
+  assert.equal(ai.length, 0);
+});
+
+test("assist enhance and surprise", async () => {
+  const ai = [];
+  const env = { AI: fakeAI(ai) };
+  const e = await j(await worker.fetch(req("/v1/assist", { method: "POST", body: { mode: "enhance", prompt: "cat", kind: "TEXT_TO_IMAGE", style: "anime" } }), env));
+  assert.equal(e.status, 200);
+  assert.match(e.body.prompt, /astronaut/);
+  const s = await j(await worker.fetch(req("/v1/assist", { method: "POST", body: { mode: "surprise", lang: "ar" } }), env));
+  assert.equal(s.status, 200);
+  assert.match(ai[1].input.messages[0].content, /Arabic/);
+  const none = await j(await worker.fetch(req("/v1/assist", { method: "POST", body: { mode: "enhance", prompt: "x" } }), {}));
+  assert.equal(none.status, 503);
+});
+
+test("free Cloudflare image provider stores the image and serves it", async () => {
+  const ai = [];
+  const store = kv();
+  const env = { AI: fakeAI(ai), QUOTA: store };
+  const r = await j(await worker.fetch(req("/v1/jobs", { method: "POST", headers: { "x-device-id": "d" }, body: job }), env));
+  assert.equal(r.status, 200);
+  assert.equal(r.body.provider, "cf");
+  const st = await j(await worker.fetch(req("/v1/jobs/" + encodeURIComponent(r.body.id)), env));
+  assert.equal(st.body.status, "DONE");
+  assert.match(st.body.resultUrl, /^https:\/\/x\/v1\/files\/[0-9a-f]{32}$/);
+  const file = await worker.fetch(new Request(st.body.resultUrl), { ...env, APP_TOKEN: "secret" });
+  assert.equal(file.status, 200);
+  assert.equal(await file.text(), "JPEGDATA");
+  // video is not offered by cf
+  const v = await j(await worker.fetch(req("/v1/jobs", { method: "POST", headers: { "x-device-id": "d" }, body: { ...job, kind: "TEXT_TO_VIDEO" } }), env));
+  assert.equal(v.status, 503);
+  assert.equal(v.body.code, "NO_PROVIDER");
+});
+
+test("cleanLlm strips labels and quotes", async () => {
+  const { cleanLlm } = await import("../src/index.js");
+  assert.equal(cleanLlm('Prompt: "hello world"'), "hello world");
+  assert.equal(cleanLlm("```\nhi\n```"), "hi");
+});
+
+test("bad job ids are 404, not 500", async () => {
+  assert.equal((await worker.fetch(req("/v1/jobs/fal.%%%"), {})).status, 404);
+  assert.equal((await worker.fetch(req("/v1/jobs/nope"), {})).status, 404);
 });

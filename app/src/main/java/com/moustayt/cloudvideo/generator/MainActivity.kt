@@ -21,6 +21,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Thumbnails for videos in the library, and a soft fade-in for every image.
+        coil.Coil.setImageLoader(
+            coil.ImageLoader.Builder(this)
+                .components { add(coil.decode.VideoFrameDecoder.Factory()) }
+                .crossfade(true)
+                .build(),
+        )
         setContent {
             val vm: AppViewModel = viewModel()
             val theme by vm.theme.collectAsState()

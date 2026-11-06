@@ -1,18 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- NeoVids AI mark: an orbit (the AI) around a play button (the video), with a spark where the orbit opens. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- play button -->
+    <!-- orbit -->
     <path
+        android:pathData="M76.55,45.79A24,24 0,1 1,62.21 31.45"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:type="linear"
+                android:startX="30" android:startY="78"
+                android:endX="78" android:endY="30">
+                <item android:color="#FF22D3EE" android:offset="0.0" />
+                <item android:color="#FF7C5CFF" android:offset="0.5" />
+                <item android:color="#FFF472B6" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- play -->
+    <path
+        android:pathData="M47.5,43.5L47.5,64.5L65.5,54Z"
         android:fillColor="#FFFFFFFF"
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="5"
-        android:strokeLineJoin="round"
-        android:pathData="M44,36L44,72L76,54Z" />
-    <!-- AI sparkle -->
+        android:strokeWidth="4"
+        android:strokeLineJoin="round" />
+    <!-- spark -->
     <path
-        android:fillColor="#FFFFE27A"
-        android:pathData="M70,31C70.6,35 72,36.4 76,37C72,37.6 70.6,39 70,43C69.4,39 68,37.6 64,37C68,36.4 69.4,35 70,31Z" />
+        android:pathData="M71,29C71.8,34.2 72.8,35.2 78,36C72.8,36.8 71.8,37.8 71,43C70.2,37.8 69.2,36.8 64,36C69.2,35.2 70.2,34.2 71,29Z"
+        android:fillColor="#FFFFFFFF" />
 </vector>
