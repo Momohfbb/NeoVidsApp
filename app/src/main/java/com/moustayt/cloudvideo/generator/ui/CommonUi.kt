@@ -174,6 +174,7 @@ fun friendlyError(code: String?, raw: String?): String = when {
     code == "UNAUTHORIZED" -> stringResource(R.string.err_auth)
     code == "NETWORK" -> stringResource(R.string.err_network)
     code == "TIMEOUT" -> stringResource(R.string.err_timeout)
+    code == "PRO_LOCKED" -> stringResource(R.string.err_pro_locked)
     else -> stringResource(R.string.error_generic, raw ?: "")
 }
 

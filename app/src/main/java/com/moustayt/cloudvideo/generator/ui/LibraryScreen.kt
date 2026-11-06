@@ -33,6 +33,8 @@ import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.VideoLibrary
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -86,6 +88,7 @@ fun statusText(item: LibraryItem, now: Long = System.currentTimeMillis()): Strin
 fun LibraryScreen(vm: AppViewModel, onOpen: (String) -> Unit, onCreate: () -> Unit) {
     val items by vm.items.collectAsState()
     var filter by rememberSaveable { mutableStateOf("all") }
+    var query by rememberSaveable { mutableStateOf("") }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val anyActive = items.any { it.status == Status.QUEUED || it.status == Status.RUNNING }
     LaunchedEffect(anyActive) {
@@ -116,7 +119,11 @@ fun LibraryScreen(vm: AppViewModel, onOpen: (String) -> Unit, onCreate: () -> Un
     val shown = when (filter) {
         "video" -> items.filter { it.kind.isVideo }
         "image" -> items.filter { !it.kind.isVideo }
+        "fav" -> items.filter { it.favorite }
+        "story" -> items.filter { it.groupId != null }
         else -> items
+    }.filter { q ->
+        query.isBlank() || q.prompt.contains(query, true) || (q.finalPrompt ?: "").contains(query, true) || (q.groupTitle ?: "").contains(query, true)
     }
 
     LazyVerticalStaggeredGrid(
@@ -129,9 +136,26 @@ fun LibraryScreen(vm: AppViewModel, onOpen: (String) -> Unit, onCreate: () -> Un
         item(span = StaggeredGridItemSpan.FullLine) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(stringResource(R.string.tab_library), style = MaterialTheme.typography.headlineMedium)
-                ChipRow(listOf("all", "video", "image"), filter, {
-                    stringResource(when (it) { "video" -> R.string.filter_videos; "image" -> R.string.filter_images; else -> R.string.filter_all })
+                androidx.compose.material3.OutlinedTextField(
+                    query, { query = it }, Modifier.fillMaxWidth(), singleLine = true,
+                    placeholder = { Text(stringResource(R.string.search)) },
+                    leadingIcon = { Icon(androidx.compose.material.icons.Icons.Outlined.Search, null) },
+                    shape = RoundedCornerShape(50),
+                )
+                ChipRow(listOf("all", "video", "image", "story", "fav"), filter, {
+                    stringResource(
+                        when (it) {
+                            "video" -> R.string.filter_videos
+                            "image" -> R.string.filter_images
+                            "story" -> R.string.filter_stories
+                            "fav" -> R.string.filter_favorites
+                            else -> R.string.filter_all
+                        },
+                    )
                 }) { filter = it }
+                if (shown.isEmpty()) {
+                    Text(stringResource(R.string.no_results), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 24.dp))
+                }
             }
         }
         items(shown, key = { it.id }) { item -> LibraryTile(item, now) { onOpen(item.id) } }
@@ -160,6 +184,21 @@ private fun LibraryTile(item: LibraryItem, now: Long, onClick: () -> Unit) {
                     }
                 }
                 else -> CreatingPlaceholder(item.kind.isVideo)
+            }
+            Row(Modifier.align(Alignment.TopStart).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (item.groupId != null) {
+                    Text(
+                        stringResource(if (item.local) R.string.film else R.string.story_badge),
+                        color = Color.White, style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.clip(RoundedCornerShape(50)).background(Brand.horizontal).padding(horizontal = 8.dp, vertical = 3.dp),
+                    )
+                }
+            }
+            if (item.favorite) {
+                Icon(
+                    androidx.compose.material.icons.Icons.Filled.Favorite, null,
+                    Modifier.align(Alignment.TopEnd).padding(8.dp).size(20.dp), tint = Brand.Pink,
+                )
             }
         }
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

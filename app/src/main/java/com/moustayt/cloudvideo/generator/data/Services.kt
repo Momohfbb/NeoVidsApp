@@ -42,7 +42,7 @@ class RemoteService(baseUrl: String, private val ownerKey: String, private val d
     private val client = HttpClient(Android) {
         install(ContentNegotiation) { json(AppJson) }
         install(HttpTimeout) {
-            requestTimeoutMillis = 45_000
+            requestTimeoutMillis = 90_000
             connectTimeoutMillis = 20_000
         }
         expectSuccess = true
@@ -75,6 +75,14 @@ class RemoteService(baseUrl: String, private val ownerKey: String, private val d
             auth()
             setBody(req)
         }.body<JobDto>()
+    }
+
+    suspend fun story(req: AssistRequest): StoryDto = readable {
+        client.post("$base/v1/assist") {
+            contentType(ContentType.Application.Json)
+            auth()
+            setBody(req.copy(mode = "story"))
+        }.body<StoryDto>()
     }
 
     suspend fun assist(req: AssistRequest): String = readable {

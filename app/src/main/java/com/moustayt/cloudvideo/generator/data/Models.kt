@@ -26,6 +26,10 @@ data class GenRequest(
     val provider: String? = null,
     /** Let the server's AI translate (e.g. Arabic) and enrich the prompt before generation. */
     val smart: Boolean = true,
+    /** "fast" (default models) or "pro" (premium licensed video models, owner only). */
+    val quality: String = "fast",
+    /** Different seeds make several variations of the same prompt. */
+    val seed: Int? = null,
 )
 
 @Serializable
@@ -43,7 +47,17 @@ data class JobDto(
 )
 
 @Serializable
-data class AssistRequest(val mode: String, val prompt: String = "", val kind: Kind, val style: String, val lang: String)
+data class AssistRequest(
+    val mode: String,
+    val prompt: String = "",
+    val kind: Kind,
+    val style: String,
+    val lang: String,
+    val scenes: Int = 4,
+)
+
+@Serializable
+data class StoryDto(val title: String = "", val scenes: List<String> = emptyList())
 
 @Serializable
 data class AssistDto(val prompt: String)
@@ -73,6 +87,12 @@ data class LibraryItem(
     val finalPrompt: String? = null,
     val errorCode: String? = null,
     @ColumnInfo(defaultValue = "5") val durationSec: Int = 5,
+    /** Scenes of one AI story share a group id; the assembled film carries it too. */
+    val groupId: String? = null,
+    val groupTitle: String? = null,
+    @ColumnInfo(defaultValue = "0") val favorite: Boolean = false,
+    /** Order of a scene inside its story. */
+    @ColumnInfo(defaultValue = "0") val sceneIndex: Int = 0,
 )
 
 @Serializable

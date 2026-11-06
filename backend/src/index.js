@@ -5,6 +5,9 @@
 //                        -> { id, status, finalPrompt }
 //   GET  /v1/jobs/:id    -> { id, status: QUEUED|RUNNING|DONE|FAILED, progress, resultUrl?, error?, code? }
 //   POST /v1/assist      { mode: "enhance"|"surprise", prompt?, kind, style, lang } -> { prompt }
+//                        { mode: "story", prompt, scenes: 3..6, style, lang } -> { title, scenes: [string] }
+//   Jobs also accept quality: "fast"|"pro" (pro = premium licensed video models, owner only unless PRO_PUBLIC=1)
+//   and seed (int) so that several variations of one prompt differ.
 //   GET  /v1/status      -> { ok, owner, quota, ai, providers }
 //   GET  /v1/providers   -> providers that are configured and what they support
 //   GET  /v1/files/:key  -> images made by the built-in Cloudflare AI provider (public, unguessable keys)
@@ -136,7 +139,15 @@ const fal = {
   name: "fal",
   kinds: KINDS,
   configured: (env) => !!env.FAL_KEY,
-  model(env, kind) {
+  model(env, kind, quality) {
+    if (quality === "pro") {
+      const pro = {
+        TEXT_TO_VIDEO: env.FAL_MODEL_T2V_PRO || "fal-ai/kling-video/v2.1/standard/text-to-video",
+        IMAGE_TO_VIDEO: env.FAL_MODEL_I2V_PRO || "fal-ai/kling-video/v2.1/standard/image-to-video",
+        TEXT_TO_IMAGE: env.FAL_MODEL_T2I_PRO || "fal-ai/flux/dev",
+      }[kind];
+      if (pro) return pro;
+    }
     return {
       TEXT_TO_VIDEO: env.FAL_MODEL_T2V || "fal-ai/ltx-video",
       IMAGE_TO_VIDEO: env.FAL_MODEL_I2V || "fal-ai/ltx-video/image-to-video",
@@ -145,8 +156,9 @@ const fal = {
     }[kind];
   },
   input(env, r) {
-    const model = fal.model(env, r.kind);
+    const model = fal.model(env, r.kind, r.quality);
     const input = { prompt: styledPrompt(r) };
+    if (Number.isInteger(r.seed)) input.seed = r.seed;
     if (r.kind === "TEXT_TO_IMAGE") {
       // fal image models take image_size presets rather than aspect_ratio
       input.image_size = { "16:9": "landscape_16_9", "9:16": "portrait_16_9", "1:1": "square_hd" }[r.aspect] || "square_hd";
@@ -227,7 +239,9 @@ const cf = {
     const model = env.CF_MODEL_T2I || "@cf/black-forest-labs/flux-1-schnell";
     let out;
     try {
-      out = await env.AI.run(model, { prompt: styledPrompt(r).slice(0, 2000), steps: 8 });
+      const input = { prompt: styledPrompt(r).slice(0, 2000), steps: 8 };
+      if (Number.isInteger(r.seed)) input.seed = r.seed;
+      out = await env.AI.run(model, input);
     } catch (e) {
       const msg = String(e && e.message || e);
       throw new HttpError(502, `Cloudflare AI: ${msg}`, /neuron|quota|limit|allocation/i.test(msg) ? "BALANCE" : "PROVIDER");
@@ -309,6 +323,44 @@ async function smartPrompt(env, r) {
   }
 }
 
+/** Splits one idea into a short film: a title and N visually consistent scene prompts. */
+async function story(env, body, lang) {
+  const n = Math.min(6, Math.max(2, parseInt(body.scenes, 10) || 4));
+  const text = await llm(
+    env,
+    `You are an award-winning film director and storyboard artist.
+Turn the user's idea into a short film of exactly ${n} consecutive shots, each 5 seconds long, with a clear beginning, middle and end.
+Write in ${lang}. Output format, nothing else:
+TITLE: <a short catchy title>
+SCENE: <shot 1>
+SCENE: <shot 2>
+...
+Rules for every SCENE line: one vivid sentence of 20 to 45 words describing exactly what the camera sees and how it moves.
+Repeat the main character's full look (age, clothes, colors) in every scene so the shots stay consistent. Same location style and lighting across shots.
+Visual style: ${STYLE_HINT[body.style] || body.style || "cinematic"}. Safe for work, no text on screen.`,
+    String(body.prompt),
+    { temperature: 0.8, maxTokens: 900 },
+  );
+  return parseStory(text, n);
+}
+
+export function parseStory(text, n) {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  let title = "";
+  const scenes = [];
+  for (const l of lines) {
+    const t = l.match(/^\**\s*(TITLE|العنوان)\s*\**\s*[:：]\s*(.+)$/i);
+    if (t && !title) { title = t[2].replace(/^["“«]|["”»]$/g, "").trim(); continue; }
+    const m = l.match(/^\**\s*(SCENE|SHOT|المشهد|مشهد|لقطة)?\s*\d*\s*\**\s*[:：.)-]\s*(.+)$/i) || l.match(/^\d+[.)-]\s*(.+)$/);
+    if (m) {
+      const body = (m[2] ?? m[1]).trim();
+      if (body.length > 12) scenes.push(body);
+    }
+  }
+  if (!scenes.length) throw new HttpError(502, "AI assistant returned no scenes", "PROVIDER");
+  return { title: title || scenes[0].split(/[,.،]/)[0].slice(0, 40), scenes: scenes.slice(0, n) };
+}
+
 async function assist(env, body) {
   const kind = KINDS.includes(body.kind) ? body.kind : "TEXT_TO_VIDEO";
   const lang = body.lang === "ar" ? "Arabic" : "English";
@@ -325,6 +377,7 @@ Answer with ONE idea in ${lang}, 12 to 25 words, vivid and specific, no quotes, 
   }
   if (!body.prompt || !String(body.prompt).trim()) throw new HttpError(400, "prompt is required");
   if (String(body.prompt).length > 2000) throw new HttpError(400, "prompt too long");
+  if (body.mode === "story") return story(env, body, lang);
   const text = await llm(env, PROMPT_ENGINEER({ kind, style: body.style }), String(body.prompt));
   return { prompt: text };
 }
@@ -343,7 +396,11 @@ function candidatesFor(env, req) {
   // cf is always a last-resort fallback, even if PROVIDER_ORDER forgets it.
   if (!order.includes("cf")) order.push("cf");
   const names = req.provider ? [req.provider] : order;
-  const list = names.map((n) => PROVIDERS[n]).filter((p) => p && p.configured(env) && p.kinds.includes(req.kind));
+  const proVideo = req.quality === "pro" && VIDEO_KINDS.includes(req.kind);
+  const list = names
+    .map((n) => PROVIDERS[n])
+    .filter((p) => p && p.configured(env) && p.kinds.includes(req.kind))
+    .filter((p) => !proVideo || p.name === "fal" || p.name === "luma");
   if (!list.length) {
     throw new HttpError(503, "No configured provider supports this request. Set a provider key (see backend/README.md).", "NO_PROVIDER");
   }
@@ -449,6 +506,9 @@ export default {
         if (!KINDS.includes(body.kind)) throw new HttpError(400, "invalid kind");
         if ((body.kind === "IMAGE_TO_VIDEO" || body.kind === "IMAGE_EDIT") && !body.sourceImage) throw new HttpError(400, "sourceImage is required");
         if (!isOwner(request, env)) delete body.provider; // only the owner can choose a provider
+        if (body.quality === "pro" && !isOwner(request, env) && env.PRO_PUBLIC !== "1") {
+          throw new HttpError(403, "Pro quality is reserved for the app owner", "PRO_LOCKED");
+        }
         const record = await quota(request, env, VIDEO_KINDS.includes(body.kind) ? "v" : "i");
         body._origin = url.origin;
         body.finalPrompt = await smartPrompt(env, body);

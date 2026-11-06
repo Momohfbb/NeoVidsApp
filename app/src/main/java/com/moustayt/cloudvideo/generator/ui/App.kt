@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ContentCut
+import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.VideoLibrary
@@ -93,6 +94,7 @@ private fun MainShell(vm: AppViewModel, onRecreate: () -> Unit) {
 
     val tabs = listOf(
         Tab("create", R.string.tab_create, Icons.Outlined.AutoAwesome),
+        Tab("explore", R.string.tab_explore, Icons.Outlined.Explore),
         Tab("library", R.string.tab_library, Icons.Outlined.VideoLibrary),
         Tab("editor", R.string.tab_editor, Icons.Outlined.ContentCut),
         Tab("settings", R.string.tab_settings, Icons.Outlined.Settings),
@@ -131,12 +133,27 @@ private fun MainShell(vm: AppViewModel, onRecreate: () -> Unit) {
         },
     ) { pad ->
         NavHost(nav, startDestination = "create", modifier = Modifier.padding(pad)) {
-            composable("create") { CreateScreen(vm) { go("library") } }
+            composable("create") { CreateScreen(vm, onSubmitted = { go("library") }, onStory = { nav.navigate("story") }) }
+            composable("explore") { ExploreScreen(vm) { go("create") } }
+            composable("story") {
+                StoryScreen(vm, onBack = { nav.popBackStack() }) { g ->
+                    nav.navigate("story/$g") { popUpTo("story") { inclusive = true } }
+                }
+            }
+            composable("story/{groupId}") { entry ->
+                StoryProgressScreen(
+                    vm, entry.arguments?.getString("groupId").orEmpty(),
+                    onBack = { nav.popBackStack() }, onOpen = { id -> nav.navigate("detail/$id") },
+                )
+            }
             composable("library") { LibraryScreen(vm, onOpen = { id -> nav.navigate("detail/$id") }, onCreate = { go("create") }) }
             composable("editor") { EditorScreen(vm) { go("library") } }
             composable("settings") { SettingsScreen(vm, onRecreate) }
             composable("detail/{id}") { entry ->
-                DetailScreen(vm, entry.arguments?.getString("id").orEmpty()) { nav.popBackStack() }
+                DetailScreen(
+                    vm, entry.arguments?.getString("id").orEmpty(),
+                    onBack = { nav.popBackStack() }, onStory = { g -> nav.navigate("story/$g") },
+                )
             }
         }
     }

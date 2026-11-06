@@ -245,3 +245,41 @@ test("bad job ids are 404, not 500", async () => {
   assert.equal((await worker.fetch(req("/v1/jobs/fal.%%%"), {})).status, 404);
   assert.equal((await worker.fetch(req("/v1/jobs/nope"), {})).status, 404);
 });
+
+test("parseStory reads title and scenes in many shapes", async () => {
+  const { parseStory } = await import("../src/index.js");
+  const s = parseStory("TITLE: The Lantern\nSCENE: A boy in a red coat walks into an old Damascus street at dusk.\n**SCENE 2:** The boy in the red coat lights a lantern, warm glow fills the alley.\n3. The boy in the red coat smiles as lanterns rise into the night sky.", 3);
+  assert.equal(s.title, "The Lantern");
+  assert.equal(s.scenes.length, 3);
+  assert.match(s.scenes[1], /lights a lantern/);
+  const ar = parseStory("العنوان: الفانوس\nالمشهد 1: صبي بمعطف أحمر يدخل شارعًا دمشقيًا قديمًا عند الغروب\nالمشهد 2: الصبي بالمعطف الأحمر يشعل فانوسًا ويملأ الضوء الزقاق", 4);
+  assert.equal(ar.title, "الفانوس");
+  assert.equal(ar.scenes.length, 2);
+});
+
+test("story assist returns scenes", async () => {
+  const env = { AI: { run: async () => ({ response: "TITLE: Waves\nSCENE: A surfer in a yellow suit paddles out at sunrise over calm water.\nSCENE: The surfer in the yellow suit rides a huge glassy wave, camera tracking." }) } };
+  const r = await j(await worker.fetch(req("/v1/assist", { method: "POST", body: { mode: "story", prompt: "surfer", scenes: 2 } }), env));
+  assert.equal(r.status, 200);
+  assert.equal(r.body.title, "Waves");
+  assert.equal(r.body.scenes.length, 2);
+});
+
+test("pro quality: owner only, uses premium fal model with seed", async () => {
+  mockFetch(() => new Response(JSON.stringify({ status_url: "s", response_url: "r" })));
+  const env = { FAL_KEY: "k", OWNER_KEY: "me", REPLICATE_TOKEN: "t" };
+  const v = { ...job, kind: "TEXT_TO_VIDEO", quality: "pro", seed: 42 };
+  const pub = await j(await worker.fetch(req("/v1/jobs", { method: "POST", body: v }), env));
+  assert.equal(pub.status, 403);
+  assert.equal(pub.body.code, "PRO_LOCKED");
+  const own = await j(await worker.fetch(req("/v1/jobs", { method: "POST", headers: { "x-owner-key": "me" }, body: v }), env));
+  assert.equal(own.status, 200);
+  assert.match(calls[0].url, /kling-video/);
+  const sent = JSON.parse(calls[0].init.body);
+  assert.equal(sent.seed, 42);
+  assert.equal(sent.duration, "5");
+  // with fal failing, pro video does not silently fall back to replicate's basic model
+  mockFetch(() => new Response(JSON.stringify({ detail: "Exhausted balance" }), { status: 403 }));
+  const fail = await j(await worker.fetch(req("/v1/jobs", { method: "POST", headers: { "x-owner-key": "me" }, body: v }), env));
+  assert.equal(fail.body.code, "BALANCE");
+});
